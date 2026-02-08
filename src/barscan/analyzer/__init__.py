@@ -8,6 +8,7 @@ from barscan.analyzer.filters import (
     get_stop_words,
 )
 from barscan.analyzer.frequency import (
+    LyricsProtocol,
     aggregate_results,
     analyze_lyrics,
     analyze_text,
@@ -49,6 +50,7 @@ __all__ = [
     "apply_filters",
     "get_stop_words",
     # Frequency
+    "LyricsProtocol",
     "analyze_text",
     "analyze_lyrics",
     "aggregate_results",

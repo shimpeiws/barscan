@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections import Counter
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING
+from typing import Protocol
 
 from barscan.analyzer.filters import apply_filters
 from barscan.analyzer.models import (
@@ -16,8 +16,24 @@ from barscan.analyzer.models import (
 from barscan.analyzer.processor import preprocess
 from barscan.exceptions import EmptyLyricsError
 
-if TYPE_CHECKING:
-    from barscan.genius.models import Lyrics
+
+class LyricsProtocol(Protocol):
+    """Protocol for lyrics objects compatible with analyze_lyrics."""
+
+    @property
+    def song_id(self) -> int: ...
+
+    @property
+    def song_title(self) -> str: ...
+
+    @property
+    def artist_name(self) -> str: ...
+
+    @property
+    def text(self) -> str: ...
+
+    @property
+    def is_empty(self) -> bool: ...
 
 
 def count_frequencies(tokens: list[str]) -> Counter[str]:
@@ -120,7 +136,7 @@ def analyze_text(
 
 
 def analyze_lyrics(
-    lyrics: Lyrics,
+    lyrics: LyricsProtocol,
     config: AnalysisConfig | None = None,
 ) -> AnalysisResult:
     """Perform word frequency analysis on a Lyrics object.
@@ -128,7 +144,7 @@ def analyze_lyrics(
     Convenience wrapper around analyze_text that extracts fields from Lyrics model.
 
     Args:
-        lyrics: Lyrics object from genius module.
+        lyrics: Lyrics object implementing LyricsProtocol.
         config: Analysis configuration (uses default if None).
 
     Returns:
