@@ -12,7 +12,13 @@ from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.table import Table
 
-from barscan.analyzer import AnalysisConfig, WordFrequency, aggregate_results, analyze_text
+from barscan.analyzer import (
+    AggregateAnalysisResult,
+    AnalysisConfig,
+    WordFrequency,
+    aggregate_results,
+    analyze_text,
+)
 from barscan.config import settings
 from barscan.exceptions import (
     ArtistNotFoundError,
@@ -21,6 +27,7 @@ from barscan.exceptions import (
     NoLyricsFoundError,
 )
 from barscan.genius import GeniusClient, LyricsCache
+from barscan.output import export_wordgrain, generate_filename, to_wordgrain
 
 app = typer.Typer(
     name="barscan",
@@ -38,6 +45,7 @@ class OutputFormat(StrEnum):
     TABLE = "table"
     JSON = "json"
     CSV = "csv"
+    WORDGRAIN = "wordgrain"
 
 
 def validate_artist_name(value: str) -> str:
@@ -200,6 +208,7 @@ def analyze(
             unique_words=aggregate.unique_words,
             frequencies=list(top_frequencies),
             output_format=output_format,
+            aggregate=aggregate,
         )
 
         if output_file:
@@ -214,6 +223,10 @@ def analyze(
                     unique_words=aggregate.unique_words,
                     frequencies=list(top_frequencies),
                 )
+            elif output_format == OutputFormat.WORDGRAIN:
+                suggested_filename = generate_filename(aggregate.artist_name)
+                console.print(f"[dim]Suggested filename: {suggested_filename}[/dim]")
+                console.print(output_content)
             else:
                 console.print(output_content)
 
@@ -235,8 +248,15 @@ def format_output(
     unique_words: int,
     frequencies: list[WordFrequency],
     output_format: OutputFormat,
+    aggregate: AggregateAnalysisResult | None = None,
 ) -> str:
     """Format analysis results for output."""
+    if output_format == OutputFormat.WORDGRAIN:
+        if aggregate is None:
+            raise ValueError("aggregate is required for WORDGRAIN format")
+        document = to_wordgrain(aggregate)
+        return export_wordgrain(document)
+
     if output_format == OutputFormat.JSON:
         data = {
             "artist": artist_name,
