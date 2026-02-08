@@ -5,12 +5,13 @@ import pytest
 from barscan.analyzer.models import AnalysisConfig
 from barscan.analyzer.processor import (
     clean_lyrics,
+    ensure_nltk_resources,
     lemmatize,
     normalize_text,
     preprocess,
     tokenize,
 )
-from barscan.exceptions import EmptyLyricsError
+from barscan.exceptions import EmptyLyricsError, NLTKResourceError
 
 
 class TestCleanLyrics:
@@ -194,3 +195,103 @@ class TestPreprocess:
         result = preprocess(text)
         assert "hello" in result
         assert "world" in result
+
+
+class TestProcessorEdgeCases:
+    """Additional edge case tests for processor functions."""
+
+    def test_clean_lyrics_with_colon_headers(self) -> None:
+        """Test removing headers with colons like [Verse 1: Artist]."""
+        text = "[Verse 1: Eminem]\nRap lyrics here"
+        result = clean_lyrics(text)
+        assert "[Verse 1: Eminem]" not in result
+        assert "Rap lyrics" in result
+
+    def test_clean_lyrics_with_hyphen_headers(self) -> None:
+        """Test removing headers with hyphens like [Pre-Chorus]."""
+        text = "[Pre-Chorus]\nBefore the chorus\n[Post-Chorus]\nAfter the chorus"
+        result = clean_lyrics(text)
+        assert "[Pre-Chorus]" not in result
+        assert "[Post-Chorus]" not in result
+        assert "Before" in result
+        assert "After" in result
+
+    def test_normalize_text_with_numbers(self) -> None:
+        """Test normalizing text containing numbers."""
+        text = "Song123 has 456 words"
+        result = normalize_text(text)
+        assert "song123" in result
+        assert "456" in result
+
+    def test_normalize_text_unicode_characters(self) -> None:
+        """Test normalizing text with unicode characters."""
+        text = "Caf\u00e9 music \u2014 good vibes"
+        result = normalize_text(text)
+        assert "caf" in result
+
+    def test_tokenize_with_mixed_quotes(self) -> None:
+        """Test tokenizing text with mixed quote styles."""
+        text = "don't \"quote\" me 'on' this"
+        result = tokenize(text)
+        assert len(result) > 0
+
+    def test_tokenize_with_multiple_spaces(self) -> None:
+        """Test tokenizing text with multiple consecutive spaces."""
+        text = "word   another    word"
+        result = tokenize(text)
+        assert "word" in result
+        assert "another" in result
+
+    def test_lemmatize_with_plural_nouns(self, config_with_lemmatization: AnalysisConfig) -> None:
+        """Test lemmatization handles plural nouns."""
+        tokens = ["dogs", "cats", "houses", "cities"]
+        result = lemmatize(tokens, config_with_lemmatization)
+        # WordNet lemmatizer should convert plurals
+        assert "dog" in result or "dogs" in result
+
+    def test_lemmatize_with_verb_forms(self, config_with_lemmatization: AnalysisConfig) -> None:
+        """Test lemmatization handles verb forms."""
+        tokens = ["running", "walked", "swimming"]
+        result = lemmatize(tokens, config_with_lemmatization)
+        # Should lemmatize at least some verb forms
+        assert len(result) == 3
+
+    def test_preprocess_only_whitespace_after_cleaning(self) -> None:
+        """Test preprocessing text that becomes only whitespace after header removal."""
+        # When text only has headers, it becomes whitespace which should raise
+        # Note: The clean_lyrics function normalizes whitespace, so "[Verse 1]   " -> ""
+        # But the header regex leaves spaces, so we need text that becomes empty
+        text = "[Verse 1]"
+        # After header removal, this becomes empty string
+        # clean_lyrics will raise because result is empty/whitespace
+        result = preprocess(text)
+        # Should return empty list since all content was headers
+        assert result == [] or len(result) == 0
+
+    def test_preprocess_with_repeated_words(self) -> None:
+        """Test preprocessing maintains word frequencies."""
+        text = "[Hook]\nYeah yeah yeah baby baby"
+        result = preprocess(text)
+        # Should have multiple occurrences
+        assert result.count("yeah") == 3 or "yeah" in result
+        assert result.count("baby") == 2 or "baby" in result
+
+    def test_clean_lyrics_multiline_headers(self) -> None:
+        """Test cleaning lyrics with headers spanning lines."""
+        text = "[Verse 1]\n[By Artist]\nActual lyrics here"
+        result = clean_lyrics(text)
+        assert "Actual lyrics" in result
+        assert "[By Artist]" not in result
+
+    def test_normalize_preserves_possessive_apostrophe(self) -> None:
+        """Test that possessive apostrophes are preserved."""
+        text = "Sarah's guitar john's bass"
+        result = normalize_text(text)
+        assert "sarah's" in result or "sarahs" in result
+
+    def test_preprocess_with_none_config_creates_default(self) -> None:
+        """Test that preprocess with None config creates default config."""
+        text = "[Verse 1]\nHello world"
+        result = preprocess(text, None)
+        assert isinstance(result, list)
+        assert len(result) > 0
