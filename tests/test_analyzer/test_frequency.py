@@ -1,0 +1,239 @@
+"""Tests for analyzer frequency."""
+
+from collections import Counter
+from datetime import datetime, timezone
+
+import pytest
+
+from barscan.analyzer.frequency import (
+    aggregate_results,
+    analyze_text,
+    count_frequencies,
+    create_word_frequencies,
+)
+from barscan.analyzer.models import AnalysisConfig, AnalysisResult, WordFrequency
+
+
+class TestCountFrequencies:
+    """Tests for count_frequencies function."""
+
+    def test_basic_counting(self) -> None:
+        """Test basic word frequency counting."""
+        tokens = ["hello", "world", "hello", "hello", "world"]
+        result = count_frequencies(tokens)
+        assert isinstance(result, Counter)
+        assert result["hello"] == 3
+        assert result["world"] == 2
+
+    def test_empty_tokens(self) -> None:
+        """Test counting empty token list."""
+        result = count_frequencies([])
+        assert len(result) == 0
+
+    def test_single_token(self) -> None:
+        """Test counting single token."""
+        result = count_frequencies(["hello"])
+        assert result["hello"] == 1
+
+    def test_all_unique(self) -> None:
+        """Test counting all unique tokens."""
+        tokens = ["one", "two", "three", "four"]
+        result = count_frequencies(tokens)
+        assert all(count == 1 for count in result.values())
+
+
+class TestCreateWordFrequencies:
+    """Tests for create_word_frequencies function."""
+
+    def test_creates_sorted_frequencies(self) -> None:
+        """Test that frequencies are sorted by count descending."""
+        counter: Counter[str] = Counter({"hello": 5, "world": 3, "test": 1})
+        result = create_word_frequencies(counter, 9)
+        assert result[0].word == "hello"
+        assert result[1].word == "world"
+        assert result[2].word == "test"
+
+    def test_calculates_percentages(self) -> None:
+        """Test that percentages are calculated correctly."""
+        counter: Counter[str] = Counter({"hello": 50, "world": 50})
+        result = create_word_frequencies(counter, 100)
+        assert result[0].percentage == 50.0
+        assert result[1].percentage == 50.0
+
+    def test_empty_counter(self) -> None:
+        """Test with empty counter."""
+        result = create_word_frequencies(Counter(), 0)
+        assert result == ()
+
+    def test_zero_total_words(self) -> None:
+        """Test with zero total words."""
+        counter: Counter[str] = Counter({"hello": 5})
+        result = create_word_frequencies(counter, 0)
+        assert result == ()
+
+    def test_returns_tuple(self) -> None:
+        """Test that result is a tuple."""
+        counter: Counter[str] = Counter({"hello": 1})
+        result = create_word_frequencies(counter, 1)
+        assert isinstance(result, tuple)
+
+
+class TestAnalyzeText:
+    """Tests for analyze_text function."""
+
+    def test_complete_analysis(self) -> None:
+        """Test complete word frequency analysis."""
+        text = "[Verse 1]\nHello world, hello universe\nThe world is beautiful"
+        result = analyze_text(
+            text=text,
+            song_id=123,
+            song_title="Test Song",
+            artist_name="Test Artist",
+        )
+        assert isinstance(result, AnalysisResult)
+        assert result.song_id == 123
+        assert result.song_title == "Test Song"
+        assert result.artist_name == "Test Artist"
+        assert result.total_words > 0
+        assert result.unique_words > 0
+        assert len(result.frequencies) > 0
+
+    def test_analysis_with_config(self) -> None:
+        """Test analysis with custom config."""
+        text = "Hello world goodbye world"
+        config = AnalysisConfig(min_word_length=5, remove_stop_words=False)
+        result = analyze_text(
+            text=text,
+            song_id=1,
+            song_title="Test",
+            artist_name="Artist",
+            config=config,
+        )
+        # "hello", "world", "goodbye" all have 5+ chars, "world" has 5
+        assert result.total_words > 0
+
+    def test_empty_after_filtering(self) -> None:
+        """Test when all words are filtered out."""
+        text = "the a an is"  # All stop words
+        result = analyze_text(
+            text=text,
+            song_id=1,
+            song_title="Test",
+            artist_name="Artist",
+        )
+        assert result.total_words == 0
+        assert result.unique_words == 0
+        assert len(result.frequencies) == 0
+
+    def test_analyzed_at_is_set(self) -> None:
+        """Test that analyzed_at timestamp is set."""
+        text = "Hello world"
+        before = datetime.now(timezone.utc)
+        result = analyze_text(
+            text=text,
+            song_id=1,
+            song_title="Test",
+            artist_name="Artist",
+        )
+        after = datetime.now(timezone.utc)
+        assert before <= result.analyzed_at <= after
+
+    def test_frequency_order(self) -> None:
+        """Test that frequencies are ordered by count descending."""
+        text = "hello hello hello world world test"
+        result = analyze_text(
+            text=text,
+            song_id=1,
+            song_title="Test",
+            artist_name="Artist",
+            config=AnalysisConfig(remove_stop_words=False, min_word_length=1),
+        )
+        counts = [f.count for f in result.frequencies]
+        assert counts == sorted(counts, reverse=True)
+
+
+class TestAggregateResults:
+    """Tests for aggregate_results function."""
+
+    def test_aggregates_multiple_results(self) -> None:
+        """Test aggregating multiple song results."""
+        now = datetime.now(timezone.utc)
+        result1 = AnalysisResult(
+            song_id=1,
+            song_title="Song 1",
+            artist_name="Artist",
+            total_words=10,
+            unique_words=5,
+            frequencies=(
+                WordFrequency(word="hello", count=5, percentage=50.0),
+                WordFrequency(word="world", count=5, percentage=50.0),
+            ),
+            analyzed_at=now,
+        )
+        result2 = AnalysisResult(
+            song_id=2,
+            song_title="Song 2",
+            artist_name="Artist",
+            total_words=10,
+            unique_words=5,
+            frequencies=(
+                WordFrequency(word="hello", count=3, percentage=30.0),
+                WordFrequency(word="goodbye", count=7, percentage=70.0),
+            ),
+            analyzed_at=now,
+        )
+        aggregate = aggregate_results([result1, result2], "Artist")
+        assert aggregate.artist_name == "Artist"
+        assert aggregate.songs_analyzed == 2
+        assert aggregate.total_words == 20  # 10 + 10
+        # Check combined frequencies
+        freq_dict = {f.word: f.count for f in aggregate.frequencies}
+        assert freq_dict["hello"] == 8  # 5 + 3
+        assert freq_dict["world"] == 5
+        assert freq_dict["goodbye"] == 7
+
+    def test_empty_results(self) -> None:
+        """Test aggregating empty results list."""
+        aggregate = aggregate_results([], "Artist")
+        assert aggregate.songs_analyzed == 0
+        assert aggregate.total_words == 0
+        assert aggregate.unique_words == 0
+        assert len(aggregate.frequencies) == 0
+
+    def test_single_result(self) -> None:
+        """Test aggregating single result."""
+        now = datetime.now(timezone.utc)
+        result = AnalysisResult(
+            song_id=1,
+            song_title="Song 1",
+            artist_name="Artist",
+            total_words=10,
+            unique_words=2,
+            frequencies=(
+                WordFrequency(word="hello", count=6, percentage=60.0),
+                WordFrequency(word="world", count=4, percentage=40.0),
+            ),
+            analyzed_at=now,
+        )
+        aggregate = aggregate_results([result], "Artist")
+        assert aggregate.songs_analyzed == 1
+        assert aggregate.total_words == 10
+        assert len(aggregate.song_results) == 1
+
+    def test_includes_song_results(self) -> None:
+        """Test that individual song results are included."""
+        now = datetime.now(timezone.utc)
+        results = [
+            AnalysisResult(
+                song_id=i,
+                song_title=f"Song {i}",
+                artist_name="Artist",
+                total_words=10,
+                unique_words=2,
+                frequencies=(),
+                analyzed_at=now,
+            )
+            for i in range(3)
+        ]
+        aggregate = aggregate_results(results, "Artist")
+        assert len(aggregate.song_results) == 3
