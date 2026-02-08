@@ -1,9 +1,7 @@
 """Tests for analyzer frequency."""
 
 from collections import Counter
-from datetime import datetime, timezone
-
-import pytest
+from datetime import UTC, datetime
 
 from barscan.analyzer.frequency import (
     aggregate_results,
@@ -128,14 +126,14 @@ class TestAnalyzeText:
     def test_analyzed_at_is_set(self) -> None:
         """Test that analyzed_at timestamp is set."""
         text = "Hello world"
-        before = datetime.now(timezone.utc)
+        before = datetime.now(UTC)
         result = analyze_text(
             text=text,
             song_id=1,
             song_title="Test",
             artist_name="Artist",
         )
-        after = datetime.now(timezone.utc)
+        after = datetime.now(UTC)
         assert before <= result.analyzed_at <= after
 
     def test_frequency_order(self) -> None:
@@ -157,7 +155,7 @@ class TestAggregateResults:
 
     def test_aggregates_multiple_results(self) -> None:
         """Test aggregating multiple song results."""
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         result1 = AnalysisResult(
             song_id=1,
             song_title="Song 1",
@@ -202,7 +200,7 @@ class TestAggregateResults:
 
     def test_single_result(self) -> None:
         """Test aggregating single result."""
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         result = AnalysisResult(
             song_id=1,
             song_title="Song 1",
@@ -222,7 +220,7 @@ class TestAggregateResults:
 
     def test_includes_song_results(self) -> None:
         """Test that individual song results are included."""
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         results = [
             AnalysisResult(
                 song_id=i,

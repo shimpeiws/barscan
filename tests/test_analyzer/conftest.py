@@ -25,7 +25,11 @@ Hello to the world once more
 @pytest.fixture
 def cleaned_lyrics_text() -> str:
     """Sample lyrics without section headers."""
-    return "Hello world, hello universe The world is spinning around Round and round we go Round and round again Another day, another world Hello to the world once more"
+    return (
+        "Hello world, hello universe The world is spinning around "
+        "Round and round we go Round and round again "
+        "Another day, another world Hello to the world once more"
+    )
 
 
 @pytest.fixture
