@@ -169,3 +169,113 @@ class TestApplyFilters:
         """Test filtering empty token list."""
         result = apply_filters([], default_config)
         assert result == []
+
+
+class TestFiltersEdgeCases:
+    """Additional edge case tests for filter functions."""
+
+    def test_filter_stop_words_with_none_config(self) -> None:
+        """Test filter_stop_words with None config."""
+        tokens = ["the", "quick", "fox"]
+        result = filter_stop_words(tokens, None)
+        # Should use default config and filter stop words
+        assert "the" not in result
+
+    def test_filter_by_length_with_none_config(self) -> None:
+        """Test filter_by_length with None config."""
+        tokens = ["a", "be", "cat"]
+        result = filter_by_length(tokens, None)
+        # Should use default min length of 2
+        assert "a" not in result
+        assert "be" in result
+        assert "cat" in result
+
+    def test_get_stop_words_combines_nltk_and_custom(self) -> None:
+        """Test that get_stop_words combines NLTK and custom stop words."""
+        config = AnalysisConfig(
+            custom_stop_words=frozenset(["yeah", "uh", "oh"])
+        )
+        stop_words = get_stop_words(config)
+        # Should include NLTK stop words
+        assert "the" in stop_words
+        assert "a" in stop_words
+        # Should include custom stop words
+        assert "yeah" in stop_words
+        assert "uh" in stop_words
+        assert "oh" in stop_words
+
+    def test_filter_stop_words_case_insensitive(self, default_config: AnalysisConfig) -> None:
+        """Test that stop word filtering is case-insensitive."""
+        tokens = ["THE", "Quick", "THE", "FOX"]
+        result = filter_stop_words(tokens, default_config)
+        # THE should be filtered regardless of case
+        result_lower = [t.lower() for t in result]
+        assert "the" not in result_lower
+
+    def test_filter_non_alphabetic_with_apostrophes(self) -> None:
+        """Test filtering tokens with apostrophes."""
+        tokens = ["don't", "won't", "it's"]
+        result = filter_non_alphabetic(tokens)
+        # Tokens with apostrophes are not purely alphabetic
+        assert "don't" not in result
+
+    def test_filter_non_alphabetic_with_hyphens(self) -> None:
+        """Test filtering hyphenated tokens."""
+        tokens = ["well-known", "self-aware", "test"]
+        result = filter_non_alphabetic(tokens)
+        # Hyphenated words are not purely alphabetic
+        assert "well-known" not in result
+        assert "test" in result
+
+    def test_apply_filters_with_multiple_additional_filters(
+        self, default_config: AnalysisConfig
+    ) -> None:
+        """Test applying multiple additional filters."""
+
+        def filter_starting_with_a(tokens: list[str]) -> list[str]:
+            return [t for t in tokens if not t.lower().startswith("a")]
+
+        def filter_ending_with_s(tokens: list[str]) -> list[str]:
+            return [t for t in tokens if not t.lower().endswith("s")]
+
+        tokens = ["apple", "banana", "cats", "dog", "elephants"]
+        result = apply_filters(
+            tokens,
+            default_config,
+            additional_filters=[filter_starting_with_a, filter_ending_with_s],
+        )
+        # apple filtered by starts with 'a'
+        assert "apple" not in result
+        # cats filtered by ends with 's'
+        assert "cats" not in result
+        # elephants filtered by both
+        assert "elephants" not in result
+        # banana and dog should remain
+        assert "banana" in result
+        assert "dog" in result
+
+    def test_filter_by_length_all_filtered(self) -> None:
+        """Test when all tokens are filtered by length."""
+        config = AnalysisConfig(min_word_length=10)
+        tokens = ["a", "be", "cat", "dog"]
+        result = filter_by_length(tokens, config)
+        assert result == []
+
+    def test_filter_non_alphabetic_all_filtered(self) -> None:
+        """Test when all tokens are non-alphabetic."""
+        tokens = ["123", "456", "78.9", "10!"]
+        result = filter_non_alphabetic(tokens)
+        assert result == []
+
+    def test_apply_filters_order_matters(self, default_config: AnalysisConfig) -> None:
+        """Test that filter order is correct."""
+        # Non-alphabetic filter runs first, then length, then stop words
+        tokens = ["The123", "quick", "a", "fox"]
+        result = apply_filters(tokens, default_config)
+        # The123 should be filtered by non-alphabetic filter
+        assert "The123" not in result
+        # 'a' should be filtered by length
+        assert "a" not in result
+        # 'quick' and 'fox' should remain
+        assert "quick" in result
+        assert "fox" in result
