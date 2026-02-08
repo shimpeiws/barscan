@@ -1,6 +1,6 @@
 """Tests for analyzer models."""
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 from pydantic import ValidationError
@@ -94,7 +94,7 @@ class TestAnalysisResult:
 
     def test_create_analysis_result(self) -> None:
         """Test creating an AnalysisResult instance."""
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         frequencies = (
             WordFrequency(word="hello", count=5, percentage=50.0),
             WordFrequency(word="world", count=5, percentage=50.0),
@@ -119,8 +119,7 @@ class TestAnalysisResult:
     def test_top_words(self) -> None:
         """Test top_words method."""
         frequencies = tuple(
-            WordFrequency(word=f"word{i}", count=10 - i, percentage=10.0)
-            for i in range(5)
+            WordFrequency(word=f"word{i}", count=10 - i, percentage=10.0) for i in range(5)
         )
         result = AnalysisResult(
             song_id=1,
@@ -129,7 +128,7 @@ class TestAnalysisResult:
             total_words=50,
             unique_words=5,
             frequencies=frequencies,
-            analyzed_at=datetime.now(timezone.utc),
+            analyzed_at=datetime.now(UTC),
         )
         top3 = result.top_words(3)
         assert len(top3) == 3
@@ -140,8 +139,7 @@ class TestAnalysisResult:
     def test_top_words_default(self) -> None:
         """Test top_words with default n=10."""
         frequencies = tuple(
-            WordFrequency(word=f"word{i}", count=20 - i, percentage=5.0)
-            for i in range(15)
+            WordFrequency(word=f"word{i}", count=20 - i, percentage=5.0) for i in range(15)
         )
         result = AnalysisResult(
             song_id=1,
@@ -150,7 +148,7 @@ class TestAnalysisResult:
             total_words=100,
             unique_words=15,
             frequencies=frequencies,
-            analyzed_at=datetime.now(timezone.utc),
+            analyzed_at=datetime.now(UTC),
         )
         top = result.top_words()
         assert len(top) == 10
@@ -164,7 +162,7 @@ class TestAnalysisResult:
             total_words=0,
             unique_words=0,
             frequencies=(),
-            analyzed_at=datetime.now(timezone.utc),
+            analyzed_at=datetime.now(UTC),
         )
         with pytest.raises(ValidationError):
             result.song_title = "New Title"  # type: ignore[misc]
@@ -175,7 +173,7 @@ class TestAggregateAnalysisResult:
 
     def test_create_aggregate_result(self) -> None:
         """Test creating an AggregateAnalysisResult instance."""
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         result = AggregateAnalysisResult(
             artist_name="Test Artist",
             songs_analyzed=5,
@@ -193,8 +191,7 @@ class TestAggregateAnalysisResult:
     def test_aggregate_top_words(self) -> None:
         """Test top_words method on aggregate result."""
         frequencies = tuple(
-            WordFrequency(word=f"word{i}", count=100 - i, percentage=1.0)
-            for i in range(20)
+            WordFrequency(word=f"word{i}", count=100 - i, percentage=1.0) for i in range(20)
         )
         result = AggregateAnalysisResult(
             artist_name="Artist",
@@ -203,7 +200,7 @@ class TestAggregateAnalysisResult:
             unique_words=20,
             frequencies=frequencies,
             song_results=(),
-            analyzed_at=datetime.now(timezone.utc),
+            analyzed_at=datetime.now(UTC),
         )
         top5 = result.top_words(5)
         assert len(top5) == 5
@@ -218,7 +215,7 @@ class TestAggregateAnalysisResult:
             unique_words=0,
             frequencies=(),
             song_results=(),
-            analyzed_at=datetime.now(timezone.utc),
+            analyzed_at=datetime.now(UTC),
         )
         with pytest.raises(ValidationError):
             result.artist_name = "New Artist"  # type: ignore[misc]
