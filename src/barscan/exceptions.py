@@ -15,3 +15,15 @@ class ArtistNotFoundError(BarScanError):
 
 class NoLyricsFoundError(BarScanError):
     """No lyrics found for song."""
+
+
+class AnalyzerError(BarScanError):
+    """Base exception for analyzer errors."""
+
+
+class EmptyLyricsError(AnalyzerError):
+    """Lyrics text is empty or contains only whitespace."""
+
+
+class NLTKResourceError(AnalyzerError):
+    """NLTK resource not available."""
