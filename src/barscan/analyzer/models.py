@@ -35,6 +35,7 @@ class AnalysisConfig(BaseModel, frozen=True):
 
     Attributes:
         min_word_length: Minimum word length to include.
+        min_count: Minimum occurrence count to include.
         use_lemmatization: Whether to apply lemmatization.
         remove_stop_words: Whether to filter out stop words.
         custom_stop_words: Additional stop words to filter.
@@ -48,6 +49,7 @@ class AnalysisConfig(BaseModel, frozen=True):
     """
 
     min_word_length: int = Field(default=2, ge=1, description="Minimum word length to include")
+    min_count: int = Field(default=1, ge=1, description="Minimum occurrence count to include")
     use_lemmatization: bool = Field(default=False, description="Whether to apply lemmatization")
     remove_stop_words: bool = Field(default=True, description="Whether to filter out stop words")
     custom_stop_words: frozenset[str] = Field(

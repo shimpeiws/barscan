@@ -166,6 +166,14 @@ def analyze(
             help="Enable slang word detection for WordGrain output",
         ),
     ] = False,
+    min_count: Annotated[
+        int,
+        typer.Option(
+            "--min-count",
+            help="Minimum occurrence count to include",
+            min=1,
+        ),
+    ] = 1,
 ) -> None:
     """Analyze word frequency in an artist's lyrics."""
     setup_logging(verbose=verbose)
@@ -202,6 +210,7 @@ def analyze(
         compute_sentiment=enhanced,
         detect_slang=detect_slang,
         contexts_mode=contexts_mode_enum,
+        min_count=min_count,
     )
 
     # Track if we need enhanced data
@@ -265,7 +274,7 @@ def analyze(
             raise typer.Exit(0)
 
         # Aggregate results
-        aggregate = aggregate_results(results, artist_data.artist.name)
+        aggregate = aggregate_results(results, artist_data.artist.name, config)
         top_frequencies = aggregate.top_words(top_words)
 
         # Prepare enhanced data if needed
