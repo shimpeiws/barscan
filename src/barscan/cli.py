@@ -121,11 +121,11 @@ def analyze(
             help="Output file path (default: stdout)",
         ),
     ] = None,
-    no_stop_words: Annotated[
+    include_stop_words: Annotated[
         bool,
         typer.Option(
-            "--no-stop-words",
-            help="Disable stop word filtering",
+            "--include-stop-words",
+            help="Include stop words in output (filtered by default)",
         ),
     ] = False,
     exclude: Annotated[
@@ -195,7 +195,7 @@ def analyze(
     # Build analysis config
     custom_stop_words = frozenset(exclude) if exclude else frozenset()
     config = AnalysisConfig(
-        remove_stop_words=not no_stop_words,
+        remove_stop_words=not include_stop_words,
         custom_stop_words=custom_stop_words,
         compute_tfidf=enhanced,
         compute_pos=enhanced,
