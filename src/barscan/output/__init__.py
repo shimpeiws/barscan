@@ -9,6 +9,7 @@ from barscan.output.wordgrain import (
     generate_filename,
     slugify,
     to_wordgrain,
+    to_wordgrain_enhanced,
 )
 
 __all__ = [
@@ -20,4 +21,5 @@ __all__ = [
     "generate_filename",
     "slugify",
     "to_wordgrain",
+    "to_wordgrain_enhanced",
 ]

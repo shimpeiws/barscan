@@ -11,9 +11,10 @@ from barscan.analyzer.models import (
     AggregateAnalysisResult,
     AnalysisConfig,
     AnalysisResult,
+    TokenWithPosition,
     WordFrequency,
 )
-from barscan.analyzer.processor import preprocess
+from barscan.analyzer.processor import preprocess, tokenize_with_positions
 from barscan.exceptions import EmptyLyricsError
 
 if TYPE_CHECKING:
@@ -192,3 +193,59 @@ def aggregate_results(
         song_results=tuple(results),
         analyzed_at=datetime.now(UTC),
     )
+
+
+def get_word_counts_per_song(
+    results: list[AnalysisResult],
+) -> list[Counter[str]]:
+    """Extract word counts per song from analysis results.
+
+    This is used for TF-IDF calculation to compute document frequencies.
+
+    Args:
+        results: List of individual song analysis results.
+
+    Returns:
+        List of Counter objects, one per song.
+    """
+    word_counts_per_song: list[Counter[str]] = []
+    for result in results:
+        song_counter: Counter[str] = Counter()
+        for freq in result.frequencies:
+            song_counter[freq.word] = freq.count
+        word_counts_per_song.append(song_counter)
+    return word_counts_per_song
+
+
+def collect_tokens_with_positions(
+    lyrics_data: list[tuple[str, int, str]],
+    config: AnalysisConfig | None = None,
+) -> list[TokenWithPosition]:
+    """Collect tokens with position information from multiple songs.
+
+    This is used for context extraction in enhanced WordGrain output.
+
+    Args:
+        lyrics_data: List of (lyrics_text, song_id, song_title) tuples.
+        config: Analysis configuration (uses default if None).
+
+    Returns:
+        Combined list of TokenWithPosition from all songs.
+    """
+    if config is None:
+        config = AnalysisConfig()
+
+    all_tokens: list[TokenWithPosition] = []
+    for lyrics_text, song_id, song_title in lyrics_data:
+        try:
+            tokens = tokenize_with_positions(
+                text=lyrics_text,
+                song_id=song_id,
+                song_title=song_title,
+                config=config,
+            )
+            all_tokens.extend(tokens)
+        except EmptyLyricsError:
+            continue
+
+    return all_tokens
