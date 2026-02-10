@@ -4,6 +4,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from pydantic import SecretStr
+
 from barscan.exceptions import ArtistNotFoundError, GeniusAPIError, NoLyricsFoundError
 from barscan.genius.client import GeniusClient
 from barscan.genius.models import Song
@@ -11,7 +13,7 @@ from barscan.genius.models import Song
 
 class TestGeniusClientInit:
     def test_requires_access_token(self, mock_settings):
-        mock_settings.genius_access_token = ""
+        mock_settings.genius_access_token = SecretStr("")
         with pytest.raises(GeniusAPIError, match="access token is required"):
             GeniusClient(settings_obj=mock_settings)
 
