@@ -318,7 +318,7 @@ class GeniusClient:
     def _convert_artist(self, genius_artist: GeniusArtist) -> Artist:
         """Convert lyricsgenius Artist to Pydantic model."""
         return Artist(
-            id=genius_artist.id,
+            id=genius_artist._body["id"],
             name=genius_artist.name,
             url=genius_artist.url,
             image_url=getattr(genius_artist, "image_url", None),
@@ -332,7 +332,7 @@ class GeniusClient:
             artist_id = genius_song.primary_artist.get("id", 0)
 
         return Song(
-            id=genius_song.id,
+            id=genius_song._body["id"],
             title=genius_song.title,
             title_with_featured=getattr(genius_song, "title_with_featured", genius_song.title),
             artist=genius_song.artist,
