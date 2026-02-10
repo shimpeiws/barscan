@@ -64,4 +64,11 @@ mypy_path = "src"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "--cov=barscan --cov-report=term-missing"
+addopts = [
+    "--cov=barscan",
+    "--cov-report=term-missing",
+    "--tb=short",
+]
+filterwarnings = [
+    "ignore::DeprecationWarning",
+]
