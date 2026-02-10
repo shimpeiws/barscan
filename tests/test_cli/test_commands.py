@@ -7,6 +7,8 @@ import pytest
 from typer.testing import CliRunner
 
 from barscan.cli import app
+from barscan.genius.cache import LyricsCache
+from barscan.genius.client import GeniusClient
 
 
 class TestConfigCommand:
@@ -16,7 +18,7 @@ class TestConfigCommand:
         """Test config command displays settings."""
         with patch("barscan.cli.settings", mock_settings):
             with patch("barscan.cli.LyricsCache") as mock_cache_class:
-                mock_cache = MagicMock()
+                mock_cache = MagicMock(spec=LyricsCache)
                 mock_cache.get_stats.return_value = {
                     "total_entries": 5,
                     "size_bytes": 1024,
@@ -36,7 +38,7 @@ class TestConfigCommand:
         """Test config command masks the API token."""
         with patch("barscan.cli.settings", mock_settings):
             with patch("barscan.cli.LyricsCache") as mock_cache_class:
-                mock_cache = MagicMock()
+                mock_cache = MagicMock(spec=LyricsCache)
                 mock_cache.get_stats.return_value = {
                     "total_entries": 0,
                     "size_bytes": 0,
@@ -58,7 +60,7 @@ class TestClearCacheCommand:
         """Test clear-cache when cache is already empty."""
         with patch("barscan.cli.settings", mock_settings):
             with patch("barscan.cli.LyricsCache") as mock_cache_class:
-                mock_cache = MagicMock()
+                mock_cache = MagicMock(spec=LyricsCache)
                 mock_cache.get_stats.return_value = {
                     "total_entries": 0,
                     "size_bytes": 0,
@@ -75,7 +77,7 @@ class TestClearCacheCommand:
         """Test clear-cache with --force flag."""
         with patch("barscan.cli.settings", mock_settings):
             with patch("barscan.cli.LyricsCache") as mock_cache_class:
-                mock_cache = MagicMock()
+                mock_cache = MagicMock(spec=LyricsCache)
                 mock_cache.get_stats.return_value = {
                     "total_entries": 5,
                     "size_bytes": 1024,
@@ -94,7 +96,7 @@ class TestClearCacheCommand:
         """Test clear-cache with --expired-only flag."""
         with patch("barscan.cli.settings", mock_settings):
             with patch("barscan.cli.LyricsCache") as mock_cache_class:
-                mock_cache = MagicMock()
+                mock_cache = MagicMock(spec=LyricsCache)
                 mock_cache.get_stats.return_value = {
                     "total_entries": 5,
                     "size_bytes": 1024,
@@ -113,7 +115,7 @@ class TestClearCacheCommand:
         """Test clear-cache --expired-only when no expired entries."""
         with patch("barscan.cli.settings", mock_settings):
             with patch("barscan.cli.LyricsCache") as mock_cache_class:
-                mock_cache = MagicMock()
+                mock_cache = MagicMock(spec=LyricsCache)
                 mock_cache.get_stats.return_value = {
                     "total_entries": 5,
                     "size_bytes": 1024,
@@ -130,7 +132,7 @@ class TestClearCacheCommand:
         """Test clear-cache cancelled by user."""
         with patch("barscan.cli.settings", mock_settings):
             with patch("barscan.cli.LyricsCache") as mock_cache_class:
-                mock_cache = MagicMock()
+                mock_cache = MagicMock(spec=LyricsCache)
                 mock_cache.get_stats.return_value = {
                     "total_entries": 5,
                     "size_bytes": 1024,
@@ -165,7 +167,7 @@ class TestAnalyzeCommand:
             with patch("barscan.cli.GeniusClient") as mock_client_class:
                 from barscan.exceptions import ArtistNotFoundError
 
-                mock_client = MagicMock()
+                mock_client = MagicMock(spec=GeniusClient)
                 mock_client.get_artist_songs.side_effect = ArtistNotFoundError("Not found")
                 mock_client_class.return_value = mock_client
 
@@ -180,7 +182,7 @@ class TestAnalyzeCommand:
         """Test analyze with table output format."""
         with patch("barscan.cli.settings", mock_settings):
             with patch("barscan.cli.GeniusClient") as mock_client_class:
-                mock_client = MagicMock()
+                mock_client = MagicMock(spec=GeniusClient)
                 mock_client.get_artist_songs.return_value = mock_artist_with_songs
                 mock_client.get_lyrics.return_value = mock_lyrics
                 mock_client_class.return_value = mock_client
@@ -197,7 +199,7 @@ class TestAnalyzeCommand:
         """Test analyze with JSON output format."""
         with patch("barscan.cli.settings", mock_settings):
             with patch("barscan.cli.GeniusClient") as mock_client_class:
-                mock_client = MagicMock()
+                mock_client = MagicMock(spec=GeniusClient)
                 mock_client.get_artist_songs.return_value = mock_artist_with_songs
                 mock_client.get_lyrics.return_value = mock_lyrics
                 mock_client_class.return_value = mock_client
@@ -224,7 +226,7 @@ class TestAnalyzeCommand:
         """Test analyze with CSV output format."""
         with patch("barscan.cli.settings", mock_settings):
             with patch("barscan.cli.GeniusClient") as mock_client_class:
-                mock_client = MagicMock()
+                mock_client = MagicMock(spec=GeniusClient)
                 mock_client.get_artist_songs.return_value = mock_artist_with_songs
                 mock_client.get_lyrics.return_value = mock_lyrics
                 mock_client_class.return_value = mock_client
@@ -242,7 +244,7 @@ class TestAnalyzeCommand:
 
         with patch("barscan.cli.settings", mock_settings):
             with patch("barscan.cli.GeniusClient") as mock_client_class:
-                mock_client = MagicMock()
+                mock_client = MagicMock(spec=GeniusClient)
                 mock_client.get_artist_songs.return_value = mock_artist_with_songs
                 mock_client.get_lyrics.return_value = mock_lyrics
                 mock_client_class.return_value = mock_client
@@ -264,7 +266,7 @@ class TestAnalyzeCommand:
 
         with patch("barscan.cli.settings", mock_settings):
             with patch("barscan.cli.GeniusClient") as mock_client_class:
-                mock_client = MagicMock()
+                mock_client = MagicMock(spec=GeniusClient)
                 mock_client.get_artist_songs.return_value = empty_result
                 mock_client_class.return_value = mock_client
 
@@ -285,7 +287,7 @@ class TestAnalyzeCommand:
         """Test analyze with --exclude option."""
         with patch("barscan.cli.settings", mock_settings):
             with patch("barscan.cli.GeniusClient") as mock_client_class:
-                mock_client = MagicMock()
+                mock_client = MagicMock(spec=GeniusClient)
                 mock_client.get_artist_songs.return_value = mock_artist_with_songs
                 mock_client.get_lyrics.return_value = mock_lyrics
                 mock_client_class.return_value = mock_client
@@ -303,7 +305,7 @@ class TestAnalyzeCommand:
         """Test analyze with --no-stop-words option."""
         with patch("barscan.cli.settings", mock_settings):
             with patch("barscan.cli.GeniusClient") as mock_client_class:
-                mock_client = MagicMock()
+                mock_client = MagicMock(spec=GeniusClient)
                 mock_client.get_artist_songs.return_value = mock_artist_with_songs
                 mock_client.get_lyrics.return_value = mock_lyrics
                 mock_client_class.return_value = mock_client
@@ -320,7 +322,7 @@ class TestAnalyzeCommand:
             with patch("barscan.cli.GeniusClient") as mock_client_class:
                 from barscan.exceptions import GeniusAPIError
 
-                mock_client = MagicMock()
+                mock_client = MagicMock(spec=GeniusClient)
                 mock_client.get_artist_songs.side_effect = GeniusAPIError("API rate limit")
                 mock_client_class.return_value = mock_client
 
@@ -335,7 +337,7 @@ class TestAnalyzeCommand:
             with patch("barscan.cli.GeniusClient") as mock_client_class:
                 from barscan.exceptions import BarScanError
 
-                mock_client = MagicMock()
+                mock_client = MagicMock(spec=GeniusClient)
                 mock_client.get_artist_songs.side_effect = BarScanError("Generic error")
                 mock_client_class.return_value = mock_client
 
@@ -351,7 +353,7 @@ class TestAnalyzeCommand:
             with patch("barscan.cli.GeniusClient") as mock_client_class:
                 from barscan.exceptions import NoLyricsFoundError
 
-                mock_client = MagicMock()
+                mock_client = MagicMock(spec=GeniusClient)
                 mock_client.get_artist_songs.return_value = mock_artist_with_songs
                 mock_client.get_lyrics.side_effect = NoLyricsFoundError("No lyrics")
                 mock_client_class.return_value = mock_client
@@ -377,7 +379,7 @@ class TestAnalyzeCommand:
 
         with patch("barscan.cli.settings", mock_settings):
             with patch("barscan.cli.GeniusClient") as mock_client_class:
-                mock_client = MagicMock()
+                mock_client = MagicMock(spec=GeniusClient)
                 mock_client.get_artist_songs.return_value = mock_artist_with_songs
                 mock_client.get_lyrics.return_value = empty_lyrics
                 mock_client_class.return_value = mock_client
@@ -406,7 +408,7 @@ class TestAnalyzeCommand:
         """Test analyze with wordgrain output format."""
         with patch("barscan.cli.settings", mock_settings):
             with patch("barscan.cli.GeniusClient") as mock_client_class:
-                mock_client = MagicMock()
+                mock_client = MagicMock(spec=GeniusClient)
                 mock_client.get_artist_songs.return_value = mock_artist_with_songs
                 mock_client.get_lyrics.return_value = mock_lyrics
                 mock_client_class.return_value = mock_client
@@ -426,7 +428,7 @@ class TestAnalyzeCommand:
 
         with patch("barscan.cli.settings", mock_settings):
             with patch("barscan.cli.GeniusClient") as mock_client_class:
-                mock_client = MagicMock()
+                mock_client = MagicMock(spec=GeniusClient)
                 mock_client.get_artist_songs.return_value = mock_artist_with_songs
                 mock_client.get_lyrics.return_value = mock_lyrics
                 mock_client_class.return_value = mock_client
@@ -449,7 +451,7 @@ class TestAnalyzeCommand:
 
         with patch("barscan.cli.settings", mock_settings):
             with patch("barscan.cli.GeniusClient") as mock_client_class:
-                mock_client = MagicMock()
+                mock_client = MagicMock(spec=GeniusClient)
                 mock_client.get_artist_songs.return_value = mock_artist_with_songs
                 mock_client.get_lyrics.return_value = mock_lyrics
                 mock_client_class.return_value = mock_client
@@ -498,7 +500,7 @@ class TestAnalyzeCommand:
 
         with patch("barscan.cli.settings", mock_settings):
             with patch("barscan.cli.GeniusClient") as mock_client_class:
-                mock_client = MagicMock()
+                mock_client = MagicMock(spec=GeniusClient)
                 mock_client.get_artist_songs.return_value = artist_with_songs
                 mock_client.get_lyrics.side_effect = get_lyrics_for_song
                 mock_client_class.return_value = mock_client
@@ -514,7 +516,7 @@ class TestAnalyzeCommand:
         """Test analyze with --max-songs option."""
         with patch("barscan.cli.settings", mock_settings):
             with patch("barscan.cli.GeniusClient") as mock_client_class:
-                mock_client = MagicMock()
+                mock_client = MagicMock(spec=GeniusClient)
                 mock_client.get_artist_songs.return_value = mock_artist_with_songs
                 mock_client.get_lyrics.return_value = mock_lyrics
                 mock_client_class.return_value = mock_client
@@ -536,7 +538,7 @@ class TestClearCacheEdgeCases:
         """Test clear-cache --expired-only cancelled by user."""
         with patch("barscan.cli.settings", mock_settings):
             with patch("barscan.cli.LyricsCache") as mock_cache_class:
-                mock_cache = MagicMock()
+                mock_cache = MagicMock(spec=LyricsCache)
                 mock_cache.get_stats.return_value = {
                     "total_entries": 5,
                     "size_bytes": 1024,
@@ -566,7 +568,7 @@ class TestConfigCommand:
 
         with patch("barscan.cli.settings", short_token_settings):
             with patch("barscan.cli.LyricsCache") as mock_cache_class:
-                mock_cache = MagicMock()
+                mock_cache = MagicMock(spec=LyricsCache)
                 mock_cache.get_stats.return_value = {
                     "total_entries": 0,
                     "size_bytes": 0,
@@ -591,7 +593,7 @@ class TestConfigCommand:
 
         with patch("barscan.cli.settings", no_token_settings):
             with patch("barscan.cli.LyricsCache") as mock_cache_class:
-                mock_cache = MagicMock()
+                mock_cache = MagicMock(spec=LyricsCache)
                 mock_cache.get_stats.return_value = {
                     "total_entries": 0,
                     "size_bytes": 0,
@@ -640,7 +642,7 @@ class TestValidation:
         """Test that artist name whitespace is stripped."""
         with patch("barscan.cli.settings", mock_settings):
             with patch("barscan.cli.GeniusClient") as mock_client_class:
-                mock_client = MagicMock()
+                mock_client = MagicMock(spec=GeniusClient)
                 mock_client.get_artist_songs.return_value = mock_artist_with_songs
                 mock_client.get_lyrics.return_value = mock_lyrics
                 mock_client_class.return_value = mock_client

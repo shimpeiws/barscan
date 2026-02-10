@@ -3,12 +3,14 @@
 from pathlib import Path
 from unittest.mock import MagicMock
 
+from lyricsgenius.types import Artist as LyricsGeniusArtist
+from lyricsgenius.types import Song as LyricsGeniusSong
 import pytest
 
 
 def create_mock_genius_artist():
     """Create a mock lyricsgenius Artist."""
-    artist = MagicMock()
+    artist = MagicMock(spec=LyricsGeniusArtist)
     artist._body = {"id": 123}
     artist.name = "Test Artist"
     artist.url = "https://genius.com/artists/Test-Artist"
@@ -26,7 +28,7 @@ def mock_genius_artist():
 
 def create_mock_genius_song():
     """Create a mock lyricsgenius Song."""
-    song = MagicMock()
+    song = MagicMock(spec=LyricsGeniusSong)
     song._body = {"id": 456}
     song.title = "Test Song"
     song.title_with_featured = "Test Song (ft. Other Artist)"
