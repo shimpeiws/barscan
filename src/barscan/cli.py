@@ -3,9 +3,13 @@
 from __future__ import annotations
 
 import json
+from collections import Counter
 from enum import StrEnum
 from pathlib import Path
-from typing import Annotated
+from typing import TYPE_CHECKING, Annotated
+
+if TYPE_CHECKING:
+    from barscan.analyzer.models import TokenWithPosition
 
 import typer
 from rich.console import Console
@@ -15,9 +19,12 @@ from rich.table import Table
 from barscan.analyzer import (
     AggregateAnalysisResult,
     AnalysisConfig,
+    ContextsMode,
     WordFrequency,
     aggregate_results,
     analyze_text,
+    collect_tokens_with_positions,
+    get_word_counts_per_song,
 )
 from barscan.config import settings
 from barscan.exceptions import (
@@ -28,7 +35,12 @@ from barscan.exceptions import (
 )
 from barscan.genius import GeniusClient, LyricsCache
 from barscan.logging import setup_logging
-from barscan.output import export_wordgrain, generate_filename, to_wordgrain
+from barscan.output import (
+    export_wordgrain,
+    generate_filename,
+    to_wordgrain,
+    to_wordgrain_enhanced,
+)
 
 app = typer.Typer(
     name="barscan",
@@ -132,6 +144,28 @@ def analyze(
             help="Enable verbose debug output to stderr",
         ),
     ] = False,
+    enhanced: Annotated[
+        bool,
+        typer.Option(
+            "--enhanced",
+            help="Enable enhanced NLP analysis (TF-IDF, POS, sentiment) for WordGrain output",
+        ),
+    ] = False,
+    contexts_mode: Annotated[
+        str,
+        typer.Option(
+            "--contexts-mode",
+            "-c",
+            help="Context mode: none (default), short (3-4 words), full (with metadata)",
+        ),
+    ] = "none",
+    detect_slang: Annotated[
+        bool,
+        typer.Option(
+            "--detect-slang",
+            help="Enable slang word detection for WordGrain output",
+        ),
+    ] = False,
 ) -> None:
     """Analyze word frequency in an artist's lyrics."""
     setup_logging(verbose=verbose)
@@ -148,12 +182,30 @@ def analyze(
         error_console.print(f"[red]Error:[/red] {e}")
         raise typer.Exit(1) from e
 
+    # Validate contexts_mode
+    try:
+        contexts_mode_enum = ContextsMode(contexts_mode)
+    except ValueError:
+        error_console.print(
+            f"[red]Error:[/red] Invalid contexts mode '{contexts_mode}'. "
+            "Valid options: none, short, full"
+        )
+        raise typer.Exit(1) from None
+
     # Build analysis config
     custom_stop_words = frozenset(exclude) if exclude else frozenset()
     config = AnalysisConfig(
         remove_stop_words=not no_stop_words,
         custom_stop_words=custom_stop_words,
+        compute_tfidf=enhanced,
+        compute_pos=enhanced,
+        compute_sentiment=enhanced,
+        detect_slang=detect_slang,
+        contexts_mode=contexts_mode_enum,
     )
+
+    # Track if we need enhanced data
+    needs_enhanced = enhanced or detect_slang or contexts_mode_enum != ContextsMode.NONE
 
     try:
         with Progress(
@@ -180,6 +232,7 @@ def analyze(
                 total=len(artist_data.songs),
             )
             results = []
+            lyrics_data: list[tuple[str, int, str]] = []  # For context extraction
             skipped = 0
 
             for song in artist_data.songs:
@@ -195,6 +248,11 @@ def analyze(
                             config=config,
                         )
                         results.append(result)
+                        # Store lyrics data for enhanced analysis
+                        if needs_enhanced:
+                            lyrics_data.append(
+                                (lyrics.lyrics_text, lyrics.song_id, lyrics.song_title)
+                            )
                 except NoLyricsFoundError:
                     skipped += 1
                 progress.advance(task)
@@ -210,6 +268,14 @@ def analyze(
         aggregate = aggregate_results(results, artist_data.artist.name)
         top_frequencies = aggregate.top_words(top_words)
 
+        # Prepare enhanced data if needed
+        word_counts_per_song = None
+        tokens_with_positions = None
+        if needs_enhanced and output_format == OutputFormat.WORDGRAIN:
+            word_counts_per_song = get_word_counts_per_song(results)
+            if contexts_mode_enum != ContextsMode.NONE:
+                tokens_with_positions = collect_tokens_with_positions(lyrics_data, config)
+
         # Output results
         output_content = format_output(
             artist_name=aggregate.artist_name,
@@ -219,6 +285,9 @@ def analyze(
             frequencies=list(top_frequencies),
             output_format=output_format,
             aggregate=aggregate,
+            config=config if needs_enhanced else None,
+            word_counts_per_song=word_counts_per_song,
+            tokens_with_positions=tokens_with_positions,
         )
 
         if output_file:
@@ -259,12 +328,25 @@ def format_output(
     frequencies: list[WordFrequency],
     output_format: OutputFormat,
     aggregate: AggregateAnalysisResult | None = None,
+    config: AnalysisConfig | None = None,
+    word_counts_per_song: list[Counter[str]] | None = None,
+    tokens_with_positions: list[TokenWithPosition] | None = None,
 ) -> str:
     """Format analysis results for output."""
     if output_format == OutputFormat.WORDGRAIN:
         if aggregate is None:
             raise ValueError("aggregate is required for WORDGRAIN format")
-        document = to_wordgrain(aggregate)
+
+        # Use enhanced output if config is provided
+        if config is not None:
+            document = to_wordgrain_enhanced(
+                aggregate=aggregate,
+                config=config,
+                word_counts_per_song=word_counts_per_song,
+                tokens_with_positions=tokens_with_positions,
+            )
+        else:
+            document = to_wordgrain(aggregate)
         return export_wordgrain(document)
 
     if output_format == OutputFormat.JSON:

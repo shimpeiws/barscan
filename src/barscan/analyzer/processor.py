@@ -14,6 +14,8 @@ from barscan.exceptions import EmptyLyricsError, NLTKResourceError
 if TYPE_CHECKING:
     from barscan.analyzer.models import AnalysisConfig
 
+from barscan.analyzer.models import TokenWithPosition
+
 # Pattern to match section headers like [Verse 1], [Chorus], [Bridge], etc.
 SECTION_HEADER_PATTERN: Final[re.Pattern[str]] = re.compile(
     r"\[([A-Za-z0-9\s\-:]+)\]",
@@ -177,3 +179,104 @@ def preprocess(text: str, config: AnalysisConfig | None = None) -> list[str]:
     tokens = lemmatize(tokens, config)
 
     return tokens
+
+
+def clean_lyrics_preserve_lines(text: str) -> list[str]:
+    """Clean lyrics while preserving line structure.
+
+    Removes section headers but keeps line breaks for context extraction.
+
+    Args:
+        text: Raw lyrics text.
+
+    Returns:
+        List of cleaned lyrics lines.
+
+    Raises:
+        EmptyLyricsError: If text is empty or whitespace only.
+    """
+    if not text or not text.strip():
+        raise EmptyLyricsError("Lyrics text is empty or contains only whitespace")
+
+    # Split into lines
+    lines = text.split("\n")
+
+    # Clean each line (remove section headers)
+    cleaned_lines: list[str] = []
+    for line in lines:
+        cleaned = SECTION_HEADER_PATTERN.sub("", line)
+        cleaned = cleaned.strip()
+        if cleaned:  # Only keep non-empty lines
+            cleaned_lines.append(cleaned)
+
+    return cleaned_lines
+
+
+def tokenize_with_positions(
+    text: str,
+    song_id: int,
+    song_title: str,
+    config: AnalysisConfig | None = None,
+) -> list[TokenWithPosition]:
+    """Tokenize text while preserving line and position information.
+
+    This is used for context extraction, where we need to track where each
+    token appears in the original lyrics.
+
+    Args:
+        text: Raw lyrics text.
+        song_id: Genius song ID.
+        song_title: Title of the song.
+        config: Analysis configuration (uses default if None).
+
+    Returns:
+        List of tokens with their position information.
+
+    Raises:
+        EmptyLyricsError: If text is empty or whitespace only.
+        NLTKResourceError: If NLTK resources are not available.
+    """
+    if config is None:
+        from barscan.analyzer.models import AnalysisConfig
+
+        config = AnalysisConfig()
+
+    ensure_nltk_resources()
+
+    # Get lines while preserving structure
+    lines = clean_lyrics_preserve_lines(text)
+
+    tokens_with_positions: list[TokenWithPosition] = []
+
+    for line_index, line in enumerate(lines):
+        # Normalize the line for tokenization
+        normalized_line = normalize_text(line)
+
+        # Tokenize the normalized line
+        try:
+            line_tokens = word_tokenize(normalized_line)
+        except LookupError as e:
+            raise NLTKResourceError(f"NLTK tokenization failed: {e}") from e
+
+        # Optionally lemmatize
+        if config.use_lemmatization:
+            try:
+                lemmatizer = WordNetLemmatizer()
+                line_tokens = [lemmatizer.lemmatize(token) for token in line_tokens]
+            except LookupError as e:
+                raise NLTKResourceError(f"NLTK lemmatization failed: {e}") from e
+
+        # Create TokenWithPosition for each token
+        for word_index, token in enumerate(line_tokens):
+            tokens_with_positions.append(
+                TokenWithPosition(
+                    token=token,
+                    line_index=line_index,
+                    word_index=word_index,
+                    original_line=line,  # Keep original line for context
+                    song_id=song_id,
+                    song_title=song_title,
+                )
+            )
+
+    return tokens_with_positions
