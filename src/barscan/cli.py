@@ -27,6 +27,7 @@ from barscan.exceptions import (
     NoLyricsFoundError,
 )
 from barscan.genius import GeniusClient, LyricsCache
+from barscan.logging import setup_logging
 from barscan.output import export_wordgrain, generate_filename, to_wordgrain
 
 app = typer.Typer(
@@ -123,8 +124,17 @@ def analyze(
             help="Additional words to exclude (can be used multiple times)",
         ),
     ] = None,
+    verbose: Annotated[
+        bool,
+        typer.Option(
+            "--verbose",
+            "-v",
+            help="Enable verbose debug output to stderr",
+        ),
+    ] = False,
 ) -> None:
     """Analyze word frequency in an artist's lyrics."""
+    setup_logging(verbose=verbose)
     if not settings.is_configured():
         error_console.print(
             "[red]Error:[/red] Genius API token not configured.\n"
@@ -376,7 +386,7 @@ def config() -> None:
     table.add_column("Value")
 
     # API Token (masked)
-    token = settings.genius_access_token
+    token = settings.get_access_token()
     if token:
         masked = token[:4] + "*" * (len(token) - 8) + token[-4:] if len(token) > 8 else "****"
         token_display = f"[green]{masked}[/green]"
