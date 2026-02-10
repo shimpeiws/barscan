@@ -13,6 +13,7 @@ from barscan.exceptions import (
     GeniusAPIError,
     NoLyricsFoundError,
 )
+from barscan.logging import get_logger
 
 from .cache import LyricsCache
 from .models import Artist, ArtistWithSongs, Lyrics, PaginatedSongs, Song
@@ -20,6 +21,8 @@ from .models import Artist, ArtistWithSongs, Lyrics, PaginatedSongs, Song
 if TYPE_CHECKING:
     from lyricsgenius.artist import Artist as GeniusArtist
     from lyricsgenius.song import Song as GeniusSong
+
+logger = get_logger("genius.client")
 
 
 class GeniusClient:
@@ -48,7 +51,7 @@ class GeniusClient:
             retry_delay: Base delay between retries (exponential backoff).
         """
         self._settings = settings_obj or settings
-        self._token = access_token or self._settings.genius_access_token
+        self._token = access_token or self._settings.get_access_token()
 
         if not self._token:
             raise GeniusAPIError("Genius access token is required")
@@ -86,6 +89,7 @@ class GeniusClient:
             ArtistNotFoundError: If no artist matches the search.
             GeniusAPIError: If API request fails.
         """
+        logger.debug("Searching for artist: %s", artist_name)
         result = self._retry_request(
             lambda: self._client.search_artist(
                 artist_name,
@@ -95,9 +99,11 @@ class GeniusClient:
         )
 
         if result is None:
-            raise ArtistNotFoundError(f"Artist not found: {artist_name}")
+            raise ArtistNotFoundError(f"Artist not found: {artist_name}", artist_name=artist_name)
 
-        return self._convert_artist(result)
+        artist = self._convert_artist(result)
+        logger.info("Found artist: %s (id=%d)", artist.name, artist.id)
+        return artist
 
     def get_artist_songs(
         self,
@@ -122,6 +128,7 @@ class GeniusClient:
         """
         max_songs = max_songs or self._settings.default_max_songs
 
+        logger.debug("Fetching artist songs: %s (max_songs=%d)", artist_name, max_songs)
         result = self._retry_request(
             lambda: self._client.search_artist(
                 artist_name,
@@ -132,7 +139,7 @@ class GeniusClient:
         )
 
         if result is None:
-            raise ArtistNotFoundError(f"Artist not found: {artist_name}")
+            raise ArtistNotFoundError(f"Artist not found: {artist_name}", artist_name=artist_name)
 
         artist = self._convert_artist(result)
         songs = [self._convert_song(s) for s in (result.songs or [])]
@@ -206,15 +213,21 @@ class GeniusClient:
             NoLyricsFoundError: If lyrics are not available.
             GeniusAPIError: If API request fails.
         """
+        logger.debug("Fetching lyrics for: %s (id=%d)", song.title, song.id)
         if self._cache:
             cached = self._cache.get_lyrics(song.id)
             if cached is not None:
+                logger.debug("Cache hit for song: %s", song.title)
                 return cached
 
         lyrics_text = self._retry_request(lambda: self._client.lyrics(song_url=str(song.url)))
 
         if lyrics_text is None or lyrics_text.strip() == "":
-            raise NoLyricsFoundError(f"No lyrics found for: {song.title} by {song.artist}")
+            raise NoLyricsFoundError(
+                f"No lyrics found for: {song.title} by {song.artist}",
+                song_id=song.id,
+                song_title=song.title,
+            )
 
         lyrics = Lyrics(
             song_id=song.id,
