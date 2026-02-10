@@ -3,6 +3,7 @@
 from unittest.mock import MagicMock, patch
 
 import pytest
+import requests.exceptions
 
 from pydantic import SecretStr
 
@@ -192,8 +193,8 @@ class TestRetryLogic:
     ):
         mock_genius = MagicMock()
         mock_genius.search_artist.side_effect = [
-            Exception("Network error"),
-            Exception("Timeout"),
+            requests.exceptions.ConnectionError("Network error"),
+            requests.exceptions.Timeout("Timeout"),
             mock_genius_artist,
         ]
         mock_genius_class.return_value = mock_genius
@@ -213,7 +214,9 @@ class TestRetryLogic:
     @patch("barscan.genius.client.time.sleep")
     def test_raises_after_max_retries(self, mock_sleep, mock_genius_class, mock_settings):
         mock_genius = MagicMock()
-        mock_genius.search_artist.side_effect = Exception("Persistent error")
+        mock_genius.search_artist.side_effect = requests.exceptions.ConnectionError(
+            "Persistent error"
+        )
         mock_genius_class.return_value = mock_genius
 
         client = GeniusClient(
@@ -454,8 +457,8 @@ class TestExponentialBackoff:
         """Test that retry delays follow exponential pattern."""
         mock_genius = MagicMock()
         mock_genius.search_artist.side_effect = [
-            Exception("Error 1"),
-            Exception("Error 2"),
+            requests.exceptions.ConnectionError("Error 1"),
+            requests.exceptions.Timeout("Error 2"),
             mock_genius_artist,
         ]
         mock_genius_class.return_value = mock_genius

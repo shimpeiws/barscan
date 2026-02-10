@@ -1,21 +1,25 @@
 """Tests for WordGrain output module."""
 
 import json
+from collections import Counter
 from datetime import UTC, datetime
+from unittest.mock import patch
 
 import pytest
 from pydantic import ValidationError
 
-from barscan.analyzer.models import AggregateAnalysisResult, WordFrequency
+from barscan.analyzer.models import AggregateAnalysisResult, AnalysisConfig, WordFrequency
 from barscan.output.wordgrain import (
     WORDGRAIN_SCHEMA_URL,
     WordGrainDocument,
     WordGrainGrain,
     WordGrainMeta,
+    _get_generator_string,
     export_wordgrain,
     generate_filename,
     slugify,
     to_wordgrain,
+    to_wordgrain_enhanced,
 )
 
 
@@ -352,3 +356,141 @@ class TestExportWordgrain:
         assert data["grains"][0]["word"] == "love"
         assert data["grains"][0]["frequency"] == 50
         assert data["grains"][0]["frequency_normalized"] == 5000.0
+
+
+class TestGetGeneratorString:
+    """Tests for _get_generator_string function."""
+
+    def test_returns_version_string(self) -> None:
+        """Test that generator string includes version."""
+        result = _get_generator_string()
+        assert result.startswith("barscan/")
+        assert len(result) > len("barscan/")
+
+    @patch("barscan.output.wordgrain.version")
+    def test_fallback_on_version_error(self, mock_version: patch) -> None:
+        """Test fallback when version lookup fails."""
+        mock_version.side_effect = Exception("Package not found")
+        result = _get_generator_string()
+        assert result == "barscan/0.1.0"
+
+
+class TestToWordgrainEnhanced:
+    """Tests for to_wordgrain_enhanced function."""
+
+    @pytest.fixture
+    def sample_aggregate(self) -> AggregateAnalysisResult:
+        """Create a sample aggregate result."""
+        frequencies = (
+            WordFrequency(word="love", count=50, percentage=1.0),
+            WordFrequency(word="heart", count=30, percentage=0.6),
+        )
+        return AggregateAnalysisResult(
+            artist_name="Test Artist",
+            songs_analyzed=2,
+            total_words=1000,
+            unique_words=100,
+            frequencies=frequencies,
+            song_results=(),
+            analyzed_at=datetime(2026, 2, 9, 12, 0, 0, tzinfo=UTC),
+        )
+
+    def test_basic_enhanced_output(self, sample_aggregate: AggregateAnalysisResult) -> None:
+        """Test basic enhanced output without any NLP features."""
+        config = AnalysisConfig()
+        doc = to_wordgrain_enhanced(sample_aggregate, config)
+
+        assert len(doc.grains) == 2
+        assert doc.grains[0].word == "love"
+        assert doc.grains[0].frequency == 50
+
+    def test_enhanced_with_tfidf(self, sample_aggregate: AggregateAnalysisResult) -> None:
+        """Test enhanced output with TF-IDF enabled."""
+        config = AnalysisConfig(compute_tfidf=True)
+        word_counts = [
+            Counter({"love": 30, "heart": 20}),
+            Counter({"love": 20, "heart": 10}),
+        ]
+
+        doc = to_wordgrain_enhanced(
+            aggregate=sample_aggregate,
+            config=config,
+            word_counts_per_song=word_counts,
+        )
+
+        # TF-IDF should be computed
+        assert doc.grains[0].tfidf is not None
+
+    def test_enhanced_with_pos(self, sample_aggregate: AggregateAnalysisResult) -> None:
+        """Test enhanced output with POS tagging enabled."""
+        config = AnalysisConfig(compute_pos=True)
+
+        doc = to_wordgrain_enhanced(aggregate=sample_aggregate, config=config)
+
+        # POS tags should be computed
+        assert doc.grains[0].pos is not None
+
+    def test_enhanced_with_sentiment(self, sample_aggregate: AggregateAnalysisResult) -> None:
+        """Test enhanced output with sentiment enabled."""
+        config = AnalysisConfig(compute_sentiment=True)
+
+        doc = to_wordgrain_enhanced(aggregate=sample_aggregate, config=config)
+
+        # Sentiment should be computed for "love" (positive word)
+        assert doc.grains[0].sentiment is not None
+        assert doc.grains[0].sentiment_score is not None
+
+    def test_enhanced_with_slang_detection(
+        self, sample_aggregate: AggregateAnalysisResult
+    ) -> None:
+        """Test enhanced output with slang detection enabled."""
+        config = AnalysisConfig(detect_slang=True)
+
+        doc = to_wordgrain_enhanced(aggregate=sample_aggregate, config=config)
+
+        # Slang flag should be set
+        assert doc.grains[0].is_slang is not None
+
+    def test_enhanced_without_word_counts(
+        self, sample_aggregate: AggregateAnalysisResult
+    ) -> None:
+        """Test that TF-IDF is None when word_counts_per_song is not provided."""
+        config = AnalysisConfig(compute_tfidf=True)
+
+        doc = to_wordgrain_enhanced(aggregate=sample_aggregate, config=config)
+
+        # TF-IDF should be None since word_counts not provided
+        assert doc.grains[0].tfidf is None
+
+    def test_enhanced_meta_mapping(self, sample_aggregate: AggregateAnalysisResult) -> None:
+        """Test that meta fields are mapped correctly."""
+        config = AnalysisConfig()
+
+        doc = to_wordgrain_enhanced(aggregate=sample_aggregate, config=config)
+
+        assert doc.meta.artist == "Test Artist"
+        assert doc.meta.corpus_size == 2
+        assert doc.meta.total_words == 1000
+
+    def test_enhanced_custom_language(self, sample_aggregate: AggregateAnalysisResult) -> None:
+        """Test custom language setting."""
+        config = AnalysisConfig()
+
+        doc = to_wordgrain_enhanced(
+            aggregate=sample_aggregate, config=config, language="ja"
+        )
+
+        assert doc.meta.language == "ja"
+
+    def test_enhanced_frequency_normalization(
+        self, sample_aggregate: AggregateAnalysisResult
+    ) -> None:
+        """Test that frequency_normalized is calculated correctly."""
+        config = AnalysisConfig()
+
+        doc = to_wordgrain_enhanced(aggregate=sample_aggregate, config=config)
+
+        # 50 / 1000 * 10000 = 500.0
+        assert doc.grains[0].frequency_normalized == 500.0
+        # 30 / 1000 * 10000 = 300.0
+        assert doc.grains[1].frequency_normalized == 300.0

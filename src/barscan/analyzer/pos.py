@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 
 import nltk
 
+from barscan.analyzer.nltk_resources import POS_RESOURCES, ensure_resources
 from barscan.exceptions import NLTKResourceError
 
 if TYPE_CHECKING:
@@ -70,17 +71,7 @@ def ensure_pos_resources() -> None:
     Raises:
         NLTKResourceError: If resources cannot be downloaded.
     """
-    resources = [
-        ("taggers/averaged_perceptron_tagger_eng", "averaged_perceptron_tagger_eng"),
-    ]
-    for path, name in resources:
-        try:
-            nltk.data.find(path)
-        except LookupError:
-            try:
-                nltk.download(name, quiet=True)
-            except Exception as e:
-                raise NLTKResourceError(f"Failed to download NLTK resource '{name}': {e}") from e
+    ensure_resources(POS_RESOURCES)
 
 
 def get_pos_tags(tokens: list[str]) -> dict[str, str]:

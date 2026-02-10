@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-import nltk
 from nltk.sentiment.vader import SentimentIntensityAnalyzer
 
+from barscan.analyzer.nltk_resources import SENTIMENT_RESOURCES, ensure_resources
 from barscan.exceptions import NLTKResourceError
 
 # Singleton instance for performance
@@ -17,17 +17,7 @@ def ensure_sentiment_resources() -> None:
     Raises:
         NLTKResourceError: If resources cannot be downloaded.
     """
-    resources = [
-        ("sentiment/vader_lexicon.zip", "vader_lexicon"),
-    ]
-    for path, name in resources:
-        try:
-            nltk.data.find(path)
-        except LookupError:
-            try:
-                nltk.download(name, quiet=True)
-            except Exception as e:
-                raise NLTKResourceError(f"Failed to download NLTK resource '{name}': {e}") from e
+    ensure_resources(SENTIMENT_RESOURCES)
 
 
 def _get_analyzer() -> SentimentIntensityAnalyzer:

@@ -3,13 +3,20 @@
 from collections import Counter
 from datetime import UTC, datetime
 
+import pytest
+
 from barscan.analyzer.frequency import (
     aggregate_results,
+    analyze_lyrics,
     analyze_text,
+    collect_tokens_with_positions,
     count_frequencies,
     create_word_frequencies,
+    get_word_counts_per_song,
 )
 from barscan.analyzer.models import AnalysisConfig, AnalysisResult, WordFrequency
+from barscan.exceptions import EmptyLyricsError
+from barscan.genius.models import Lyrics
 
 
 class TestCountFrequencies:
@@ -235,3 +242,178 @@ class TestAggregateResults:
         ]
         aggregate = aggregate_results(results, "Artist")
         assert len(aggregate.song_results) == 3
+
+
+class TestAnalyzeLyrics:
+    """Tests for analyze_lyrics function."""
+
+    def test_analyze_lyrics_with_valid_lyrics(self) -> None:
+        """Test analyzing a Lyrics object."""
+        lyrics = Lyrics(
+            song_id=123,
+            song_title="Test Song",
+            artist_name="Test Artist",
+            lyrics_text="Hello world hello universe",
+        )
+        result = analyze_lyrics(lyrics)
+
+        assert result.song_id == 123
+        assert result.song_title == "Test Song"
+        assert result.artist_name == "Test Artist"
+        assert result.total_words > 0
+
+    def test_analyze_lyrics_empty_raises_error(self) -> None:
+        """Test that empty lyrics raises EmptyLyricsError."""
+        lyrics = Lyrics(
+            song_id=123,
+            song_title="Test Song",
+            artist_name="Test Artist",
+            lyrics_text="",
+        )
+        with pytest.raises(EmptyLyricsError, match="No lyrics available"):
+            analyze_lyrics(lyrics)
+
+    def test_analyze_lyrics_with_config(self) -> None:
+        """Test analyze_lyrics with custom config."""
+        lyrics = Lyrics(
+            song_id=123,
+            song_title="Test Song",
+            artist_name="Test Artist",
+            lyrics_text="Hello world goodbye world",
+        )
+        config = AnalysisConfig(use_lemmatization=True)
+        result = analyze_lyrics(lyrics, config=config)
+
+        assert result.song_id == 123
+        assert result.total_words > 0
+
+
+class TestGetWordCountsPerSong:
+    """Tests for get_word_counts_per_song function."""
+
+    def test_extracts_counters_from_results(self) -> None:
+        """Test extracting word counters from analysis results."""
+        now = datetime.now(UTC)
+        results = [
+            AnalysisResult(
+                song_id=1,
+                song_title="Song 1",
+                artist_name="Artist",
+                total_words=10,
+                unique_words=2,
+                frequencies=(
+                    WordFrequency(word="hello", count=6, percentage=60.0),
+                    WordFrequency(word="world", count=4, percentage=40.0),
+                ),
+                analyzed_at=now,
+            ),
+        ]
+
+        counters = get_word_counts_per_song(results)
+
+        assert len(counters) == 1
+        assert counters[0]["hello"] == 6
+        assert counters[0]["world"] == 4
+
+    def test_multiple_songs(self) -> None:
+        """Test extracting counters from multiple songs."""
+        now = datetime.now(UTC)
+        results = [
+            AnalysisResult(
+                song_id=1,
+                song_title="Song 1",
+                artist_name="Artist",
+                total_words=10,
+                unique_words=2,
+                frequencies=(
+                    WordFrequency(word="hello", count=6, percentage=60.0),
+                    WordFrequency(word="world", count=4, percentage=40.0),
+                ),
+                analyzed_at=now,
+            ),
+            AnalysisResult(
+                song_id=2,
+                song_title="Song 2",
+                artist_name="Artist",
+                total_words=10,
+                unique_words=2,
+                frequencies=(
+                    WordFrequency(word="goodbye", count=7, percentage=70.0),
+                    WordFrequency(word="universe", count=3, percentage=30.0),
+                ),
+                analyzed_at=now,
+            ),
+        ]
+
+        counters = get_word_counts_per_song(results)
+
+        assert len(counters) == 2
+        assert counters[0]["hello"] == 6
+        assert counters[1]["goodbye"] == 7
+
+    def test_empty_results(self) -> None:
+        """Test with empty results list."""
+        counters = get_word_counts_per_song([])
+        assert counters == []
+
+
+class TestCollectTokensWithPositions:
+    """Tests for collect_tokens_with_positions function."""
+
+    def test_collects_from_multiple_songs(self) -> None:
+        """Test collecting tokens from multiple songs."""
+        lyrics_data = [
+            ("[Verse 1]\nHello world", 1, "Song 1"),
+            ("[Verse 1]\nGoodbye world", 2, "Song 2"),
+        ]
+
+        tokens = collect_tokens_with_positions(lyrics_data)
+
+        assert len(tokens) > 0
+        song_ids = {t.song_id for t in tokens}
+        assert 1 in song_ids
+        assert 2 in song_ids
+
+    def test_skips_empty_lyrics(self) -> None:
+        """Test that empty lyrics are skipped."""
+        lyrics_data = [
+            ("[Verse 1]\nHello world", 1, "Song 1"),
+            ("", 2, "Song 2"),  # Empty
+            ("[Verse 1]\nGoodbye", 3, "Song 3"),
+        ]
+
+        tokens = collect_tokens_with_positions(lyrics_data)
+
+        song_ids = {t.song_id for t in tokens}
+        assert 1 in song_ids
+        assert 2 not in song_ids  # Empty lyrics skipped
+        assert 3 in song_ids
+
+    def test_with_config(self) -> None:
+        """Test collecting tokens with custom config."""
+        lyrics_data = [
+            ("[Verse 1]\nRunning cats dogs", 1, "Song 1"),
+        ]
+        config = AnalysisConfig(use_lemmatization=True)
+
+        tokens = collect_tokens_with_positions(lyrics_data, config=config)
+
+        assert len(tokens) > 0
+
+    def test_empty_lyrics_data(self) -> None:
+        """Test with empty lyrics data list."""
+        tokens = collect_tokens_with_positions([])
+        assert tokens == []
+
+    def test_tokens_have_position_info(self) -> None:
+        """Test that tokens have correct position information."""
+        lyrics_data = [
+            ("[Verse 1]\nHello world", 123, "Test Song"),
+        ]
+
+        tokens = collect_tokens_with_positions(lyrics_data)
+
+        assert all(t.song_id == 123 for t in tokens)
+        assert all(t.song_title == "Test Song" for t in tokens)
+        assert all(isinstance(t.line_index, int) for t in tokens)
+        assert all(isinstance(t.word_index, int) for t in tokens)
