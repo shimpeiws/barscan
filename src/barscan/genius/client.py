@@ -5,6 +5,7 @@ from __future__ import annotations
 import time
 from typing import TYPE_CHECKING, Any
 
+import requests.exceptions
 from lyricsgenius import Genius
 
 from barscan.config import Settings, settings
@@ -298,14 +299,20 @@ class GeniusClient:
         return lyrics_list
 
     def _retry_request(self, request_fn: Any, retries: int | None = None) -> Any:
-        """Execute a request with retry logic and exponential backoff."""
+        """Execute a request with retry logic and exponential backoff.
+
+        Catches network-related exceptions (ConnectionError, Timeout, HTTPError, etc.)
+        and retries with exponential backoff. Programming errors and system signals
+        are not caught and will propagate immediately.
+        """
         retries = retries or self._max_retries
         last_error: Exception | None = None
 
         for attempt in range(retries):
             try:
                 return request_fn()
-            except Exception as e:
+            except requests.exceptions.RequestException as e:
+                # Network errors: ConnectionError, Timeout, HTTPError, etc.
                 last_error = e
                 if attempt < retries - 1:
                     delay = self._retry_delay * (2**attempt)

@@ -5,10 +5,10 @@ from __future__ import annotations
 import re
 from typing import TYPE_CHECKING, Final
 
-import nltk
 from nltk.stem import WordNetLemmatizer
 from nltk.tokenize import word_tokenize
 
+from barscan.analyzer.nltk_resources import PROCESSOR_RESOURCES, ensure_resources
 from barscan.exceptions import EmptyLyricsError, NLTKResourceError
 
 if TYPE_CHECKING:
@@ -28,6 +28,28 @@ PUNCTUATION_PATTERN: Final[re.Pattern[str]] = re.compile(r"[^\w\s']")
 # Pattern to match standalone apostrophes
 STANDALONE_APOSTROPHE_PATTERN: Final[re.Pattern[str]] = re.compile(r"(?<!\w)'|'(?!\w)")
 
+# Module-level cached lemmatizer for performance
+_lemmatizer: WordNetLemmatizer | None = None
+
+
+def _get_lemmatizer() -> WordNetLemmatizer:
+    """Get or create the WordNet lemmatizer.
+
+    Returns:
+        WordNetLemmatizer instance.
+
+    Raises:
+        NLTKResourceError: If WordNet is not available.
+    """
+    global _lemmatizer
+    if _lemmatizer is None:
+        ensure_nltk_resources()
+        try:
+            _lemmatizer = WordNetLemmatizer()
+        except LookupError as e:
+            raise NLTKResourceError(f"NLTK WordNet initialization failed: {e}") from e
+    return _lemmatizer
+
 
 def ensure_nltk_resources() -> None:
     """Ensure required NLTK resources are downloaded.
@@ -37,19 +59,7 @@ def ensure_nltk_resources() -> None:
     Raises:
         NLTKResourceError: If resources cannot be downloaded.
     """
-    resources = [
-        ("tokenizers/punkt_tab", "punkt_tab"),
-        ("corpora/stopwords", "stopwords"),
-        ("corpora/wordnet", "wordnet"),
-    ]
-    for path, name in resources:
-        try:
-            nltk.data.find(path)
-        except LookupError:
-            try:
-                nltk.download(name, quiet=True)
-            except Exception as e:
-                raise NLTKResourceError(f"Failed to download NLTK resource '{name}': {e}") from e
+    ensure_resources(PROCESSOR_RESOURCES)
 
 
 def clean_lyrics(text: str) -> str:
@@ -146,12 +156,8 @@ def lemmatize(tokens: list[str], config: AnalysisConfig | None = None) -> list[s
     if not config.use_lemmatization:
         return tokens
 
-    ensure_nltk_resources()
-    try:
-        lemmatizer = WordNetLemmatizer()
-        return [lemmatizer.lemmatize(token) for token in tokens]
-    except LookupError as e:
-        raise NLTKResourceError(f"NLTK lemmatization failed: {e}") from e
+    lemmatizer = _get_lemmatizer()
+    return [lemmatizer.lemmatize(token) for token in tokens]
 
 
 def preprocess(text: str, config: AnalysisConfig | None = None) -> list[str]:
@@ -260,11 +266,8 @@ def tokenize_with_positions(
 
         # Optionally lemmatize
         if config.use_lemmatization:
-            try:
-                lemmatizer = WordNetLemmatizer()
-                line_tokens = [lemmatizer.lemmatize(token) for token in line_tokens]
-            except LookupError as e:
-                raise NLTKResourceError(f"NLTK lemmatization failed: {e}") from e
+            lemmatizer = _get_lemmatizer()
+            line_tokens = [lemmatizer.lemmatize(token) for token in line_tokens]
 
         # Create TokenWithPosition for each token
         for word_index, token in enumerate(line_tokens):

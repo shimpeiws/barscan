@@ -8,8 +8,27 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from barscan.logging import get_logger
+
 if TYPE_CHECKING:
     from .models import Lyrics
+
+logger = get_logger("genius.cache")
+
+
+def _ensure_timezone_aware(dt_str: str) -> datetime:
+    """Parse ISO datetime string and ensure it's timezone-aware.
+
+    Args:
+        dt_str: ISO format datetime string.
+
+    Returns:
+        Timezone-aware datetime (UTC if no timezone info in string).
+    """
+    dt = datetime.fromisoformat(dt_str)
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=UTC)
+    return dt
 
 
 class LyricsCache:
@@ -46,20 +65,21 @@ class LyricsCache:
         cache_file = self._get_cache_path(song_id)
 
         if not cache_file.exists():
+            logger.debug("Cache miss for song_id=%d (file not found)", song_id)
             return None
 
         try:
             data = json.loads(cache_file.read_text(encoding="utf-8"))
 
-            fetched_at = datetime.fromisoformat(data["fetched_at"])
-            if fetched_at.tzinfo is None:
-                fetched_at = fetched_at.replace(tzinfo=UTC)
+            fetched_at = _ensure_timezone_aware(data["fetched_at"])
             if datetime.now(UTC) - fetched_at > self.ttl:
+                logger.debug("Cache miss for song_id=%d (expired)", song_id)
                 cache_file.unlink()
                 return None
 
             from .models import Lyrics
 
+            logger.debug("Cache hit for song_id=%d", song_id)
             return Lyrics(
                 song_id=data["song_id"],
                 song_title=data["song_title"],
@@ -67,7 +87,8 @@ class LyricsCache:
                 lyrics_text=data["lyrics_text"],
                 fetched_at=fetched_at,
             )
-        except (json.JSONDecodeError, KeyError, ValueError):
+        except (json.JSONDecodeError, KeyError, ValueError) as e:
+            logger.warning("Invalid cache entry for song_id=%d: %s", song_id, e)
             cache_file.unlink(missing_ok=True)
             return None
 
@@ -92,6 +113,7 @@ class LyricsCache:
             json.dumps(data, ensure_ascii=False, indent=2),
             encoding="utf-8",
         )
+        logger.debug("Cached lyrics for song_id=%d", lyrics.song_id)
 
     def clear(self) -> int:
         """
@@ -105,6 +127,7 @@ class LyricsCache:
             for cache_file in self.cache_dir.rglob("*.json"):
                 cache_file.unlink()
                 count += 1
+        logger.info("Cleared %d cache entries", count)
         return count
 
     def clear_expired(self) -> int:
@@ -122,9 +145,7 @@ class LyricsCache:
         for cache_file in self.cache_dir.rglob("*.json"):
             try:
                 data = json.loads(cache_file.read_text(encoding="utf-8"))
-                fetched_at = datetime.fromisoformat(data["fetched_at"])
-                if fetched_at.tzinfo is None:
-                    fetched_at = fetched_at.replace(tzinfo=UTC)
+                fetched_at = _ensure_timezone_aware(data["fetched_at"])
                 if now - fetched_at > self.ttl:
                     cache_file.unlink()
                     count += 1
@@ -132,6 +153,7 @@ class LyricsCache:
                 cache_file.unlink()
                 count += 1
 
+        logger.info("Cleared %d expired cache entries", count)
         return count
 
     def get_stats(self) -> dict[str, int]:
@@ -149,9 +171,7 @@ class LyricsCache:
             size += cache_file.stat().st_size
             try:
                 data = json.loads(cache_file.read_text(encoding="utf-8"))
-                fetched_at = datetime.fromisoformat(data["fetched_at"])
-                if fetched_at.tzinfo is None:
-                    fetched_at = fetched_at.replace(tzinfo=UTC)
+                fetched_at = _ensure_timezone_aware(data["fetched_at"])
                 if now - fetched_at > self.ttl:
                     expired += 1
             except (json.JSONDecodeError, KeyError, ValueError):
