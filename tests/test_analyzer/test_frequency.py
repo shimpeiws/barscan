@@ -82,6 +82,21 @@ class TestCreateWordFrequencies:
         result = create_word_frequencies(counter, 1)
         assert isinstance(result, tuple)
 
+    def test_filters_by_min_count(self) -> None:
+        """Test that words below min_count are filtered out."""
+        counter: Counter[str] = Counter({"hello": 5, "world": 3, "rare": 1})
+        result = create_word_frequencies(counter, 9, min_count=3)
+        words = {f.word for f in result}
+        assert "hello" in words
+        assert "world" in words
+        assert "rare" not in words
+
+    def test_min_count_default_includes_all(self) -> None:
+        """Test that default min_count (1) includes all words."""
+        counter: Counter[str] = Counter({"hello": 5, "world": 3, "rare": 1})
+        result = create_word_frequencies(counter, 9)
+        assert len(result) == 3
+
 
 class TestAnalyzeText:
     """Tests for analyze_text function."""
@@ -242,6 +257,47 @@ class TestAggregateResults:
         ]
         aggregate = aggregate_results(results, "Artist")
         assert len(aggregate.song_results) == 3
+
+    def test_applies_min_count_filter(self) -> None:
+        """Test that min_count from config filters aggregate frequencies."""
+        now = datetime.now(UTC)
+        result1 = AnalysisResult(
+            song_id=1,
+            song_title="Song 1",
+            artist_name="Artist",
+            total_words=10,
+            unique_words=3,
+            frequencies=(
+                WordFrequency(word="hello", count=5, percentage=50.0),
+                WordFrequency(word="world", count=4, percentage=40.0),
+                WordFrequency(word="rare", count=1, percentage=10.0),
+            ),
+            analyzed_at=now,
+        )
+        result2 = AnalysisResult(
+            song_id=2,
+            song_title="Song 2",
+            artist_name="Artist",
+            total_words=10,
+            unique_words=3,
+            frequencies=(
+                WordFrequency(word="hello", count=3, percentage=30.0),
+                WordFrequency(word="goodbye", count=6, percentage=60.0),
+                WordFrequency(word="unique", count=1, percentage=10.0),
+            ),
+            analyzed_at=now,
+        )
+        config = AnalysisConfig(min_count=3)
+        aggregate = aggregate_results([result1, result2], "Artist", config)
+
+        freq_dict = {f.word: f.count for f in aggregate.frequencies}
+        # hello: 5+3=8, world: 4, goodbye: 6 should be included
+        assert "hello" in freq_dict
+        assert "world" in freq_dict
+        assert "goodbye" in freq_dict
+        # rare: 1, unique: 1 should be filtered out
+        assert "rare" not in freq_dict
+        assert "unique" not in freq_dict
 
 
 class TestAnalyzeLyrics:

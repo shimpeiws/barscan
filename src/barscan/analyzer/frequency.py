@@ -33,12 +33,15 @@ def count_frequencies(tokens: list[str]) -> Counter[str]:
     return Counter(tokens)
 
 
-def create_word_frequencies(counter: Counter[str], total_words: int) -> tuple[WordFrequency, ...]:
+def create_word_frequencies(
+    counter: Counter[str], total_words: int, min_count: int = 1
+) -> tuple[WordFrequency, ...]:
     """Convert Counter to sorted tuple of WordFrequency objects.
 
     Args:
         counter: Counter with word frequencies.
         total_words: Total word count for percentage calculation.
+        min_count: Minimum occurrence count to include (default: 1).
 
     Returns:
         Tuple of WordFrequency objects sorted by count descending.
@@ -53,6 +56,7 @@ def create_word_frequencies(counter: Counter[str], total_words: int) -> tuple[Wo
             percentage=round((count / total_words) * 100, 2),
         )
         for word, count in counter.most_common()
+        if count >= min_count
     )
 
     return frequencies
@@ -153,16 +157,21 @@ def analyze_lyrics(
 def aggregate_results(
     results: list[AnalysisResult],
     artist_name: str,
+    config: AnalysisConfig | None = None,
 ) -> AggregateAnalysisResult:
     """Aggregate multiple song analysis results into one.
 
     Args:
         results: List of individual song analysis results.
         artist_name: Name of the artist.
+        config: Analysis configuration for min_count filtering (uses default if None).
 
     Returns:
         AggregateAnalysisResult with combined frequencies.
     """
+    if config is None:
+        config = AnalysisConfig()
+
     if not results:
         return AggregateAnalysisResult(
             artist_name=artist_name,
@@ -182,7 +191,7 @@ def aggregate_results(
 
     total_words = sum(combined_counter.values())
     unique_words = len(combined_counter)
-    frequencies = create_word_frequencies(combined_counter, total_words)
+    frequencies = create_word_frequencies(combined_counter, total_words, config.min_count)
 
     return AggregateAnalysisResult(
         artist_name=artist_name,
