@@ -11,6 +11,8 @@ from barscan.exceptions import ArtistNotFoundError, GeniusAPIError, NoLyricsFoun
 from barscan.genius.client import GeniusClient
 from barscan.genius.models import Song
 
+from .conftest import create_mock_genius_artist, create_mock_genius_song
+
 
 class TestGeniusClientInit:
     def test_requires_access_token(self, mock_settings):
@@ -42,7 +44,8 @@ class TestGeniusClientInit:
 
 class TestSearchArtist:
     @patch("barscan.genius.client.Genius")
-    def test_search_artist_success(self, mock_genius_class, mock_settings, mock_genius_artist):
+    def test_search_artist_success(self, mock_genius_class, mock_settings):
+        mock_genius_artist = create_mock_genius_artist()
         mock_genius = MagicMock()
         mock_genius.search_artist.return_value = mock_genius_artist
         mock_genius_class.return_value = mock_genius
@@ -67,9 +70,9 @@ class TestSearchArtist:
 
 class TestGetArtistSongs:
     @patch("barscan.genius.client.Genius")
-    def test_get_artist_songs_success(
-        self, mock_genius_class, mock_settings, mock_genius_artist, mock_genius_song
-    ):
+    def test_get_artist_songs_success(self, mock_genius_class, mock_settings):
+        mock_genius_artist = create_mock_genius_artist()
+        mock_genius_song = create_mock_genius_song()
         mock_genius_artist.songs = [mock_genius_song]
         mock_genius = MagicMock()
         mock_genius.search_artist.return_value = mock_genius_artist
@@ -188,9 +191,8 @@ class TestGetLyricsWithCache:
 class TestRetryLogic:
     @patch("barscan.genius.client.Genius")
     @patch("barscan.genius.client.time.sleep")
-    def test_retry_on_failure(
-        self, mock_sleep, mock_genius_class, mock_settings, mock_genius_artist
-    ):
+    def test_retry_on_failure(self, mock_sleep, mock_genius_class, mock_settings):
+        mock_genius_artist = create_mock_genius_artist()
         mock_genius = MagicMock()
         mock_genius.search_artist.side_effect = [
             requests.exceptions.ConnectionError("Network error"),
@@ -232,14 +234,9 @@ class TestRetryLogic:
 
 class TestGetAllLyrics:
     @patch("barscan.genius.client.Genius")
-    def test_get_all_lyrics(
-        self,
-        mock_genius_class,
-        mock_settings,
-        mock_genius_artist,
-        mock_genius_song,
-        sample_lyrics_text,
-    ):
+    def test_get_all_lyrics(self, mock_genius_class, mock_settings, sample_lyrics_text):
+        mock_genius_artist = create_mock_genius_artist()
+        mock_genius_song = create_mock_genius_song()
         mock_genius_artist.songs = [mock_genius_song]
         mock_genius = MagicMock()
         mock_genius.search_artist.return_value = mock_genius_artist
@@ -253,13 +250,9 @@ class TestGetAllLyrics:
         assert result[0].lyrics_text == sample_lyrics_text
 
     @patch("barscan.genius.client.Genius")
-    def test_skips_songs_without_lyrics(
-        self,
-        mock_genius_class,
-        mock_settings,
-        mock_genius_artist,
-        mock_genius_song,
-    ):
+    def test_skips_songs_without_lyrics(self, mock_genius_class, mock_settings):
+        mock_genius_artist = create_mock_genius_artist()
+        mock_genius_song = create_mock_genius_song()
         mock_genius_artist.songs = [mock_genius_song]
         mock_genius = MagicMock()
         mock_genius.search_artist.return_value = mock_genius_artist
@@ -345,10 +338,9 @@ class TestGetLyricsById:
     """Tests for get_lyrics_by_id method."""
 
     @patch("barscan.genius.client.Genius")
-    def test_get_lyrics_by_id_success(
-        self, mock_genius_class, mock_settings, mock_genius_song, sample_lyrics_text
-    ):
+    def test_get_lyrics_by_id_success(self, mock_genius_class, mock_settings, sample_lyrics_text):
         """Test getting lyrics by song ID."""
+        mock_genius_song = create_mock_genius_song()
         mock_genius = MagicMock()
         mock_genius.search_song.return_value = mock_genius_song
         mock_genius.lyrics.return_value = sample_lyrics_text
@@ -451,10 +443,9 @@ class TestExponentialBackoff:
 
     @patch("barscan.genius.client.Genius")
     @patch("barscan.genius.client.time.sleep")
-    def test_exponential_backoff_delays(
-        self, mock_sleep, mock_genius_class, mock_settings, mock_genius_artist
-    ):
+    def test_exponential_backoff_delays(self, mock_sleep, mock_genius_class, mock_settings):
         """Test that retry delays follow exponential pattern."""
+        mock_genius_artist = create_mock_genius_artist()
         mock_genius = MagicMock()
         mock_genius.search_artist.side_effect = [
             requests.exceptions.ConnectionError("Error 1"),
@@ -483,10 +474,9 @@ class TestClientEdgeCases:
     """Additional edge case tests for GeniusClient."""
 
     @patch("barscan.genius.client.Genius")
-    def test_get_artist_songs_with_empty_songs_list(
-        self, mock_genius_class, mock_settings, mock_genius_artist
-    ):
+    def test_get_artist_songs_with_empty_songs_list(self, mock_genius_class, mock_settings):
         """Test getting artist with empty songs list."""
+        mock_genius_artist = create_mock_genius_artist()
         mock_genius_artist.songs = []
         mock_genius = MagicMock()
         mock_genius.search_artist.return_value = mock_genius_artist
@@ -499,10 +489,9 @@ class TestClientEdgeCases:
         assert result.total_songs_fetched == 0
 
     @patch("barscan.genius.client.Genius")
-    def test_get_artist_songs_with_none_songs(
-        self, mock_genius_class, mock_settings, mock_genius_artist
-    ):
+    def test_get_artist_songs_with_none_songs(self, mock_genius_class, mock_settings):
         """Test getting artist when songs attribute is None."""
+        mock_genius_artist = create_mock_genius_artist()
         mock_genius_artist.songs = None
         mock_genius = MagicMock()
         mock_genius.search_artist.return_value = mock_genius_artist
@@ -522,11 +511,13 @@ class TestClientEdgeCases:
         client = GeniusClient(settings_obj=mock_settings, enable_cache=False)
 
         # Create minimal artist mock without optional attributes
-        artist = MagicMock(spec=["id", "name", "url"])
-        artist.id = 123
+        artist = MagicMock()
+        artist._body = {"id": 123}
         artist.name = "Test Artist"
         artist.url = "https://genius.com/artists/test"
-        # image_url and is_verified attributes don't exist
+        # Remove image_url and is_verified attributes
+        del artist.image_url
+        del artist.is_verified
 
         result = client._convert_artist(artist)
 
@@ -544,11 +535,14 @@ class TestClientEdgeCases:
         client = GeniusClient(settings_obj=mock_settings, enable_cache=False)
 
         # Create song mock without primary_artist having an id
-        song = MagicMock(spec=["id", "title", "artist", "url", "primary_artist"])
-        song.id = 456
+        song = MagicMock()
+        song._body = {"id": 456}
         song.title = "Test Song"
+        song.title_with_featured = "Test Song"
         song.artist = "Artist Name"
         song.url = "https://genius.com/test"
+        song.lyrics_state = "complete"
+        song.header_image_url = None
         song.primary_artist = None  # No primary artist
 
         result = client._convert_song(song)

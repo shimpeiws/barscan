@@ -6,11 +6,10 @@ from unittest.mock import MagicMock
 import pytest
 
 
-@pytest.fixture
-def mock_genius_artist():
+def create_mock_genius_artist():
     """Create a mock lyricsgenius Artist."""
     artist = MagicMock()
-    artist.id = 123
+    artist._body = {"id": 123}
     artist.name = "Test Artist"
     artist.url = "https://genius.com/artists/Test-Artist"
     artist.image_url = "https://images.genius.com/test.jpg"
@@ -20,20 +19,29 @@ def mock_genius_artist():
 
 
 @pytest.fixture
-def mock_genius_song():
+def mock_genius_artist():
+    """Create a mock lyricsgenius Artist."""
+    return create_mock_genius_artist()
+
+
+def create_mock_genius_song():
     """Create a mock lyricsgenius Song."""
     song = MagicMock()
-    song.id = 456
+    song._body = {"id": 456}
     song.title = "Test Song"
     song.title_with_featured = "Test Song (ft. Other Artist)"
     song.artist = "Test Artist"
     song.url = "https://genius.com/Test-artist-test-song-lyrics"
     song.lyrics_state = "complete"
     song.header_image_url = "https://images.genius.com/song.jpg"
-
     song.primary_artist = {"id": 123, "name": "Test Artist"}
-
     return song
+
+
+@pytest.fixture
+def mock_genius_song():
+    """Create a mock lyricsgenius Song."""
+    return create_mock_genius_song()
 
 
 @pytest.fixture
