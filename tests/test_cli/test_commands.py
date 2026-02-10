@@ -297,10 +297,10 @@ class TestAnalyzeCommand:
 
                 assert result.exit_code == 0
 
-    def test_analyze_no_stop_words(
+    def test_analyze_include_stop_words(
         self, cli_runner: CliRunner, mock_settings, mock_artist_with_songs, mock_lyrics
     ):
-        """Test analyze with --no-stop-words option."""
+        """Test analyze with --include-stop-words option."""
         with patch("barscan.cli.settings", mock_settings):
             with patch("barscan.cli.GeniusClient") as mock_client_class:
                 mock_client = MagicMock()
@@ -309,7 +309,7 @@ class TestAnalyzeCommand:
                 mock_client_class.return_value = mock_client
 
                 result = cli_runner.invoke(
-                    app, ["analyze", "Test Artist", "--no-stop-words", "-t", "5"]
+                    app, ["analyze", "Test Artist", "--include-stop-words", "-t", "5"]
                 )
 
                 assert result.exit_code == 0
