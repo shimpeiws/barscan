@@ -14,6 +14,11 @@ A Python CLI tool that analyzes word frequency in song lyrics using the Genius A
 
 ## Installation
 
+### Prerequisites
+
+- Python 3.11 or higher
+- pip (latest version recommended)
+
 ### From PyPI (when published)
 
 ```bash

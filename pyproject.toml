@@ -6,7 +6,7 @@ readme = "README.md"
 license = { text = "MIT" }
 requires-python = ">=3.11"
 authors = [
-    { name = "shimpeiws" }
+    { name = "shimpeiws", email = "shimpeiws@gmail.com" }
 ]
 keywords = ["lyrics", "genius", "word-frequency", "nlp", "cli"]
 classifiers = [
@@ -18,7 +18,6 @@ classifiers = [
     "Programming Language :: Python :: 3.12",
     "Topic :: Text Processing :: Linguistic",
 ]
-
 dependencies = [
     "lyricsgenius>=3.0.1",
     "typer[all]>=0.15.0",
@@ -27,6 +26,13 @@ dependencies = [
     "pydantic>=2.5.0",
     "pydantic-settings>=2.1.0",
 ]
+
+[project.urls]
+Homepage = "https://github.com/shimpeiws/barscan"
+Repository = "https://github.com/shimpeiws/barscan.git"
+Issues = "https://github.com/shimpeiws/barscan/issues"
+Changelog = "https://github.com/shimpeiws/barscan/releases"
+"WordGrain Schema" = "https://github.com/shimpeiws/word-grain"
 
 [project.optional-dependencies]
 japanese = ["janome>=0.5.0", "stopwordsiso>=0.6.1"]
