@@ -51,17 +51,17 @@ POS_TAG_MAP: dict[str, str] = {
     "WDT": "determiner",
     # Interjections
     "UH": "interjection",
-    # Modals
-    "MD": "modal",
-    # Other
-    "CD": "number",
-    "EX": "existential",
-    "FW": "foreign",
-    "LS": "list",
-    "POS": "possessive",
+    # Particles
     "RP": "particle",
-    "SYM": "symbol",
-    "WRB": "wh-adverb",
+    # Other (mapped to "other" for WordGrain schema compatibility)
+    "MD": "other",  # Modal
+    "CD": "other",  # Cardinal number
+    "EX": "other",  # Existential there
+    "FW": "other",  # Foreign word
+    "LS": "other",  # List item marker
+    "POS": "other",  # Possessive ending
+    "SYM": "other",  # Symbol
+    "WRB": "other",  # Wh-adverb
 }
 
 
@@ -112,8 +112,8 @@ def get_pos_tags(tokens: list[str]) -> dict[str, str]:
     result: dict[str, str] = {}
     for word, tag_counts in word_tags.items():
         most_common_tag = tag_counts.most_common(1)[0][0]
-        # Map to simple label, default to the raw tag if not in map
-        result[word] = POS_TAG_MAP.get(most_common_tag, most_common_tag.lower())
+        # Map to simple label, default to "other" for WordGrain schema compatibility
+        result[word] = POS_TAG_MAP.get(most_common_tag, "other")
 
     return result
 
@@ -131,4 +131,4 @@ def get_pos_tag(word: str) -> str:
         NLTKResourceError: If POS tagger is not available.
     """
     tags = get_pos_tags([word])
-    return tags.get(word.lower(), "unknown")
+    return tags.get(word.lower(), "other")
