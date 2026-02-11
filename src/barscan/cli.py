@@ -174,6 +174,14 @@ def analyze(
             min=1,
         ),
     ] = 1,
+    language: Annotated[
+        str,
+        typer.Option(
+            "--language",
+            "-l",
+            help="Language for tokenization: english, japanese, or auto (default)",
+        ),
+    ] = "auto",
 ) -> None:
     """Analyze word frequency in an artist's lyrics."""
     setup_logging(verbose=verbose)
@@ -200,6 +208,15 @@ def analyze(
         )
         raise typer.Exit(1) from None
 
+    # Validate language
+    valid_languages = {"english", "japanese", "auto"}
+    if language not in valid_languages:
+        error_console.print(
+            f"[red]Error:[/red] Invalid language '{language}'. "
+            "Valid options: english, japanese, auto"
+        )
+        raise typer.Exit(1)
+
     # Build analysis config
     custom_stop_words = frozenset(exclude) if exclude else frozenset()
     config = AnalysisConfig(
@@ -211,6 +228,7 @@ def analyze(
         detect_slang=detect_slang,
         contexts_mode=contexts_mode_enum,
         min_count=min_count,
+        language=language,
     )
 
     # Track if we need enhanced data

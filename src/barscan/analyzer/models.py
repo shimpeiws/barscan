@@ -55,7 +55,13 @@ class AnalysisConfig(BaseModel, frozen=True):
     custom_stop_words: frozenset[str] = Field(
         default_factory=frozenset, description="Additional stop words to filter"
     )
-    language: str = Field(default="english", description="Language for NLTK processing")
+    language: str = Field(
+        default="auto", description="Language for tokenization: english, japanese, or auto"
+    )
+    use_pos_filtering: bool = Field(
+        default=True,
+        description="Filter by part-of-speech for Japanese (keep nouns, verbs, adjectives)",
+    )
 
     # Enhanced NLP analysis options
     compute_tfidf: bool = Field(default=False, description="Whether to compute TF-IDF scores")

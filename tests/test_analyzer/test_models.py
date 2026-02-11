@@ -60,7 +60,8 @@ class TestAnalysisConfig:
         assert config.use_lemmatization is False
         assert config.remove_stop_words is True
         assert config.custom_stop_words == frozenset()
-        assert config.language == "english"
+        assert config.language == "auto"
+        assert config.use_pos_filtering is True
 
     def test_custom_config(self) -> None:
         """Test creating config with custom values."""

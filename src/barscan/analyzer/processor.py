@@ -6,9 +6,14 @@ import re
 from typing import TYPE_CHECKING, Final
 
 from nltk.stem import WordNetLemmatizer
-from nltk.tokenize import word_tokenize
 
 from barscan.analyzer.nltk_resources import PROCESSOR_RESOURCES, ensure_resources
+from barscan.analyzer.tokenizer import (
+    JapaneseTokenizer,
+    detect_language,
+    get_tokenizer,
+    normalize_text_for_language,
+)
 from barscan.exceptions import EmptyLyricsError, NLTKResourceError
 
 if TYPE_CHECKING:
@@ -88,59 +93,84 @@ def clean_lyrics(text: str) -> str:
     return cleaned
 
 
-def normalize_text(text: str) -> str:
+def normalize_text(text: str, config: AnalysisConfig | None = None) -> str:
     """Normalize text for analysis.
 
-    Converts to lowercase, removes punctuation (except apostrophes in contractions),
-    and normalizes whitespace.
+    For English: Converts to lowercase, removes punctuation (except apostrophes
+    in contractions), and normalizes whitespace.
+    For Japanese: Applies NFKC normalization and removes common punctuation.
 
     Args:
         text: Text to normalize.
+        config: Analysis configuration (uses default if None).
 
     Returns:
         Normalized text.
     """
-    # Lowercase
-    normalized = text.lower()
+    if config is None:
+        from barscan.analyzer.models import AnalysisConfig
 
-    # Remove punctuation except apostrophes in contractions
-    normalized = PUNCTUATION_PATTERN.sub(" ", normalized)
+        config = AnalysisConfig()
 
-    # Remove standalone apostrophes
-    normalized = STANDALONE_APOSTROPHE_PATTERN.sub("", normalized)
+    language = config.language
+    if language == "auto":
+        language = detect_language(text)
 
-    # Normalize whitespace
-    normalized = " ".join(normalized.split())
-
-    return normalized
+    return normalize_text_for_language(text, language)
 
 
-def tokenize(text: str) -> list[str]:
-    """Tokenize text into words using NLTK.
+def tokenize(text: str, config: AnalysisConfig | None = None) -> list[str]:
+    """Tokenize text into words using appropriate tokenizer.
+
+    For English: Uses NLTK word_tokenize.
+    For Japanese: Uses Janome morphological analyzer with optional POS filtering.
 
     Args:
         text: Text to tokenize.
+        config: Analysis configuration (uses default if None).
 
     Returns:
         List of word tokens.
 
     Raises:
-        NLTKResourceError: If NLTK punkt tokenizer is not available.
+        NLTKResourceError: If NLTK resources are not available (for English).
+        ImportError: If Janome is not installed (for Japanese).
     """
-    ensure_nltk_resources()
+    if config is None:
+        from barscan.analyzer.models import AnalysisConfig
+
+        config = AnalysisConfig()
+
+    language = config.language
+    if language == "auto":
+        language = detect_language(text)
+
+    if language == "english":
+        ensure_nltk_resources()
+
+    tokenizer = get_tokenizer(language, text)
     try:
-        tokens: list[str] = word_tokenize(text)
-        return tokens
+        # Use POS filtering for Japanese if enabled
+        if language == "japanese" and config.use_pos_filtering:
+            if isinstance(tokenizer, JapaneseTokenizer):
+                return tokenizer.tokenize_with_pos_filter(text)
+        return tokenizer.tokenize(text)
     except LookupError as e:
-        raise NLTKResourceError(f"NLTK tokenization failed: {e}") from e
+        raise NLTKResourceError(f"Tokenization failed: {e}") from e
 
 
-def lemmatize(tokens: list[str], config: AnalysisConfig | None = None) -> list[str]:
+def lemmatize(
+    tokens: list[str], config: AnalysisConfig | None = None, text: str | None = None
+) -> list[str]:
     """Lemmatize tokens to their base form.
+
+    For English: Uses WordNet lemmatizer.
+    For Japanese: Skipped (Janome already returns base forms when using get_base_forms).
 
     Args:
         tokens: List of word tokens.
         config: Analysis configuration (uses default if None).
+        text: Original text for language detection (optional).
 
     Returns:
         List of lemmatized tokens.
@@ -154,6 +184,14 @@ def lemmatize(tokens: list[str], config: AnalysisConfig | None = None) -> list[s
         config = AnalysisConfig()
 
     if not config.use_lemmatization:
+        return tokens
+
+    # Skip lemmatization for Japanese (Janome handles base forms)
+    language = config.language
+    if language == "auto" and text:
+        language = detect_language(text)
+
+    if language == "japanese":
         return tokens
 
     lemmatizer = _get_lemmatizer()
@@ -180,9 +218,9 @@ def preprocess(text: str, config: AnalysisConfig | None = None) -> list[str]:
         config = AnalysisConfig()
 
     cleaned = clean_lyrics(text)
-    normalized = normalize_text(cleaned)
-    tokens = tokenize(normalized)
-    tokens = lemmatize(tokens, config)
+    normalized = normalize_text(cleaned, config)
+    tokens = tokenize(normalized, config)
+    tokens = lemmatize(tokens, config, text=cleaned)
 
     return tokens
 
@@ -247,25 +285,38 @@ def tokenize_with_positions(
 
         config = AnalysisConfig()
 
-    ensure_nltk_resources()
+    # Determine language once for consistency
+    language = config.language
+    if language == "auto":
+        language = detect_language(text)
+
+    if language == "english":
+        ensure_nltk_resources()
 
     # Get lines while preserving structure
     lines = clean_lyrics_preserve_lines(text)
 
     tokens_with_positions: list[TokenWithPosition] = []
+    tokenizer = get_tokenizer(language)
 
     for line_index, line in enumerate(lines):
         # Normalize the line for tokenization
-        normalized_line = normalize_text(line)
+        normalized_line = normalize_text_for_language(line, language)
 
-        # Tokenize the normalized line
+        # Tokenize the normalized line (use POS filtering for Japanese if enabled)
         try:
-            line_tokens = word_tokenize(normalized_line)
+            if language == "japanese" and config.use_pos_filtering:
+                if isinstance(tokenizer, JapaneseTokenizer):
+                    line_tokens = tokenizer.tokenize_with_pos_filter(normalized_line)
+                else:
+                    line_tokens = tokenizer.tokenize(normalized_line)
+            else:
+                line_tokens = tokenizer.tokenize(normalized_line)
         except LookupError as e:
-            raise NLTKResourceError(f"NLTK tokenization failed: {e}") from e
+            raise NLTKResourceError(f"Tokenization failed: {e}") from e
 
-        # Optionally lemmatize
-        if config.use_lemmatization:
+        # Optionally lemmatize (only for English)
+        if config.use_lemmatization and language == "english":
             lemmatizer = _get_lemmatizer()
             line_tokens = [lemmatizer.lemmatize(token) for token in line_tokens]
 
