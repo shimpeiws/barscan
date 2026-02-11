@@ -4,7 +4,7 @@ This module provides Pydantic models and functions to export analysis results
 in the WordGrain JSON format (.wg.json), a standardized schema for vocabulary
 analysis data.
 
-Reference: https://mumbl.dev/schemas/wordgrain/v0.1.0
+Reference: https://raw.githubusercontent.com/shimpeiws/word-grain/main/schema/v0.1.0/wordgrain.schema.json
 """
 
 from __future__ import annotations
@@ -30,7 +30,7 @@ from barscan.analyzer.sentiment import get_sentiment_scores
 from barscan.analyzer.slang import detect_slang_words
 from barscan.analyzer.tfidf import calculate_corpus_tfidf
 
-WORDGRAIN_SCHEMA_URL = "https://mumbl.dev/schemas/wordgrain/v0.1.0"
+WORDGRAIN_SCHEMA_URL = "https://raw.githubusercontent.com/shimpeiws/word-grain/main/schema/v0.1.0/wordgrain.schema.json"
 
 
 class WordGrainGrain(BaseModel, frozen=True):
