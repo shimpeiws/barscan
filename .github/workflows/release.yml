@@ -40,6 +40,10 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      id-token: write
+    environment:
+      name: pypi
+      url: https://pypi.org/p/barscan
 
     steps:
       - uses: actions/checkout@v4
@@ -63,3 +67,6 @@ jobs:
             --title "Release ${{ github.ref_name }}" \
             --generate-notes \
             dist/*
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
