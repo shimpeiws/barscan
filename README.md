@@ -202,7 +202,7 @@ Output example:
 
 ```json
 {
-  "$schema": "https://mumbl.dev/schemas/wordgrain/v0.1.0",
+  "$schema": "https://raw.githubusercontent.com/shimpeiws/word-grain/main/schema/v0.1.0/wordgrain.schema.json",
   "meta": {
     "source": "genius",
     "artist": "Kendrick Lamar",

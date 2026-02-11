@@ -136,7 +136,7 @@ class TestWordGrainDocument:
             ),
             grains=(),
         )
-        assert doc.schema_ == "https://mumbl.dev/schemas/wordgrain/v0.1.0"
+        assert doc.schema_ == "https://raw.githubusercontent.com/shimpeiws/word-grain/main/schema/v0.1.0/wordgrain.schema.json"
 
     def test_schema_field_alias(self) -> None:
         """Test that $schema field is serialized correctly."""
