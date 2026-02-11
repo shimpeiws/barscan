@@ -38,6 +38,18 @@ class TestGetStopWords:
         assert isinstance(stop_words, frozenset)
         assert "the" in stop_words
 
+    def test_japanese_includes_english_stop_words(self) -> None:
+        """Test that Japanese mode includes English stop words for mixed text."""
+        config = AnalysisConfig(language="japanese")
+        stop_words = get_stop_words(config)
+        # Should include English stop words
+        assert "the" in stop_words
+        assert "a" in stop_words
+        assert "is" in stop_words
+        assert "me" in stop_words
+        assert "it" in stop_words
+        assert "on" in stop_words
+
 
 class TestFilterStopWords:
     """Tests for filter_stop_words function."""
@@ -63,6 +75,34 @@ class TestFilterStopWords:
         """Test filtering empty token list."""
         result = filter_stop_words([], default_config)
         assert result == []
+
+    def test_japanese_mode_filters_english_stop_words(self) -> None:
+        """Test that Japanese mode filters English stop words in mixed text."""
+        config = AnalysisConfig(language="japanese")
+        # Mixed Japanese/English tokens
+        tokens = ["知る", "the", "me", "仲間", "it", "on", "見る"]
+        result = filter_stop_words(tokens, config)
+        # English stop words should be removed
+        assert "the" not in result
+        assert "me" not in result
+        assert "it" not in result
+        assert "on" not in result
+        # Japanese content words should remain
+        assert "知る" in result
+        assert "仲間" in result
+        assert "見る" in result
+
+    def test_japanese_mode_filters_capitalized_english_stop_words(self) -> None:
+        """Test that Japanese mode filters capitalized English stop words."""
+        config = AnalysisConfig(language="japanese")
+        tokens = ["Yeah", "The", "Me", "All", "仲間"]
+        result = filter_stop_words(tokens, config)
+        # Capitalized versions should also be filtered
+        assert "The" not in result
+        assert "Me" not in result
+        assert "All" not in result
+        # Japanese content words should remain
+        assert "仲間" in result
 
 
 class TestFilterByLength:

@@ -90,8 +90,8 @@ def analyze_text(
     # Preprocess text
     tokens = preprocess(text, config)
 
-    # Apply filters
-    filtered_tokens = apply_filters(tokens, config)
+    # Apply filters (pass text for language detection)
+    filtered_tokens = apply_filters(tokens, config, text=text)
 
     # Handle empty result after filtering
     if not filtered_tokens:
