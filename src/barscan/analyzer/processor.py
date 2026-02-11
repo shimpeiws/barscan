@@ -220,6 +220,8 @@ def preprocess(text: str, config: AnalysisConfig | None = None) -> list[str]:
     cleaned = clean_lyrics(text)
     normalized = normalize_text(cleaned, config)
     tokens = tokenize(normalized, config)
+    # Ensure all tokens are lowercase (safety measure for mixed-language text)
+    tokens = [token.lower() for token in tokens]
     tokens = lemmatize(tokens, config, text=cleaned)
 
     return tokens
@@ -314,6 +316,9 @@ def tokenize_with_positions(
                 line_tokens = tokenizer.tokenize(normalized_line)
         except LookupError as e:
             raise NLTKResourceError(f"Tokenization failed: {e}") from e
+
+        # Ensure all tokens are lowercase (safety measure for mixed-language text)
+        line_tokens = [token.lower() for token in line_tokens]
 
         # Optionally lemmatize (only for English)
         if config.use_lemmatization and language == "english":

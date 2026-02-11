@@ -280,6 +280,19 @@ class TestProcessorEdgeCases:
         assert result.count("yeah") == 3 or "yeah" in result
         assert result.count("baby") == 2 or "baby" in result
 
+    def test_preprocess_normalizes_mixed_case_to_lowercase(self) -> None:
+        """Test that mixed-case words are normalized to lowercase."""
+        text = "[Hook]\nYeah YEAH yeah Wavy WAVY"
+        result = preprocess(text)
+        # All variations should become lowercase
+        assert "yeah" in result
+        assert "wavy" in result
+        # No uppercase versions should exist
+        assert "Yeah" not in result
+        assert "YEAH" not in result
+        assert "Wavy" not in result
+        assert "WAVY" not in result
+
     def test_clean_lyrics_multiline_headers(self) -> None:
         """Test cleaning lyrics with headers spanning lines."""
         text = "[Verse 1]\n[By Artist]\nActual lyrics here"
