@@ -19,11 +19,21 @@ A Python CLI tool that analyzes word frequency in song lyrics using the Genius A
 - Python 3.11 or higher
 - pip (latest version recommended)
 
-### From PyPI (when published)
+### From PyPI
 
 ```bash
 pip install barscan
 ```
+
+#### With Japanese Support
+
+To analyze Japanese lyrics, install with the `japanese` extra:
+
+```bash
+pip install barscan[japanese]
+```
+
+This includes [Janome](https://mocobeta.github.io/janome/) for Japanese tokenization and additional stop words.
 
 ### From Source
 
