@@ -1,6 +1,6 @@
 [project]
 name = "barscan"
-version = "0.1.0"
+version = "0.2.0"
 description = "Lyrics word frequency analyzer using Genius API"
 readme = "README.md"
 license = { text = "MIT" }
