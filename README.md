@@ -211,7 +211,7 @@ know,65,1.20
 
 ### WordGrain Format
 
-[WordGrain](https://github.com/shimpeiws/word-grain) is a standardized JSON schema for vocabulary analysis data. It enables interoperability between different word frequency analysis tools.
+[WordGrain](https://github.com/shimpeiws/word-grain) is a standardized JSON schema for vocabulary analysis data. It enables interoperability between different word frequency analysis tools. See the [documentation](https://shimpeiws.github.io/word-grain/) for details.
 
 Output example:
 
