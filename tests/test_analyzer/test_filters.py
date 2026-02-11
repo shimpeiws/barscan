@@ -1,5 +1,7 @@
 """Tests for analyzer filters."""
 
+import pytest
+
 from barscan.analyzer.filters import (
     apply_filters,
     filter_by_length,
@@ -8,6 +10,19 @@ from barscan.analyzer.filters import (
     get_stop_words,
 )
 from barscan.analyzer.models import AnalysisConfig
+
+# Check if Japanese dependencies are available
+try:
+    from stopwordsiso import stopwords as _  # noqa: F401
+
+    HAS_JAPANESE_DEPS = True
+except ImportError:
+    HAS_JAPANESE_DEPS = False
+
+requires_japanese = pytest.mark.skipif(
+    not HAS_JAPANESE_DEPS,
+    reason="Japanese dependencies not installed (pip install barscan[japanese])",
+)
 
 
 class TestGetStopWords:
@@ -38,6 +53,7 @@ class TestGetStopWords:
         assert isinstance(stop_words, frozenset)
         assert "the" in stop_words
 
+    @requires_japanese
     def test_japanese_includes_english_stop_words(self) -> None:
         """Test that Japanese mode includes English stop words for mixed text."""
         config = AnalysisConfig(language="japanese")
@@ -76,6 +92,7 @@ class TestFilterStopWords:
         result = filter_stop_words([], default_config)
         assert result == []
 
+    @requires_japanese
     def test_japanese_mode_filters_english_stop_words(self) -> None:
         """Test that Japanese mode filters English stop words in mixed text."""
         config = AnalysisConfig(language="japanese")
@@ -92,6 +109,7 @@ class TestFilterStopWords:
         assert "仲間" in result
         assert "見る" in result
 
+    @requires_japanese
     def test_japanese_mode_filters_capitalized_english_stop_words(self) -> None:
         """Test that Japanese mode filters capitalized English stop words."""
         config = AnalysisConfig(language="japanese")
@@ -232,9 +250,7 @@ class TestFiltersEdgeCases:
 
     def test_get_stop_words_combines_nltk_and_custom(self) -> None:
         """Test that get_stop_words combines NLTK and custom stop words."""
-        config = AnalysisConfig(
-            custom_stop_words=frozenset(["yeah", "uh", "oh"])
-        )
+        config = AnalysisConfig(custom_stop_words=frozenset(["yeah", "uh", "oh"]))
         stop_words = get_stop_words(config)
         # Should include NLTK stop words
         assert "the" in stop_words
