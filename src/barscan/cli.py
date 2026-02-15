@@ -38,6 +38,7 @@ from barscan.logging import setup_logging
 from barscan.output import (
     export_wordgrain,
     generate_filename,
+    resolve_wordgrain_language,
     to_wordgrain,
     to_wordgrain_enhanced,
 )
@@ -364,6 +365,13 @@ def format_output(
         if aggregate is None:
             raise ValueError("aggregate is required for WORDGRAIN format")
 
+        # Resolve language for WordGrain output
+        wg_language = (
+            resolve_wordgrain_language(config.language, [f.word for f in aggregate.frequencies])
+            if config is not None
+            else "en"
+        )
+
         # Use enhanced output if config is provided
         if config is not None:
             document = to_wordgrain_enhanced(
@@ -371,9 +379,10 @@ def format_output(
                 config=config,
                 word_counts_per_song=word_counts_per_song,
                 tokens_with_positions=tokens_with_positions,
+                language=wg_language,
             )
         else:
-            document = to_wordgrain(aggregate)
+            document = to_wordgrain(aggregate, language=wg_language)
         return export_wordgrain(document)
 
     if output_format == OutputFormat.JSON:
