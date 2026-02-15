@@ -29,8 +29,36 @@ from barscan.analyzer.pos import get_pos_tags
 from barscan.analyzer.sentiment import get_sentiment_scores
 from barscan.analyzer.slang import detect_slang_words
 from barscan.analyzer.tfidf import calculate_corpus_tfidf
+from barscan.analyzer.tokenizer import detect_language
 
 WORDGRAIN_SCHEMA_URL = "https://raw.githubusercontent.com/shimpeiws/word-grain/main/schema/v0.1.0/wordgrain.schema.json"
+
+# Mapping from AnalysisConfig language names to ISO 639-1 codes
+_LANGUAGE_TO_ISO: dict[str, str] = {
+    "english": "en",
+    "japanese": "ja",
+}
+
+
+def resolve_wordgrain_language(config_language: str, words: list[str] | None = None) -> str:
+    """Resolve AnalysisConfig language to ISO 639-1 code for WordGrain output.
+
+    Args:
+        config_language: Language from AnalysisConfig ('english', 'japanese', or 'auto').
+        words: Words from analysis results, used for auto-detection.
+
+    Returns:
+        ISO 639-1 language code (e.g., 'en', 'ja').
+    """
+    if config_language in _LANGUAGE_TO_ISO:
+        return _LANGUAGE_TO_ISO[config_language]
+
+    # For "auto", detect from words
+    if config_language == "auto" and words:
+        detected = detect_language(" ".join(words))
+        return _LANGUAGE_TO_ISO.get(detected, "en")
+
+    return "en"
 
 
 class WordGrainGrain(BaseModel, frozen=True):
@@ -226,7 +254,7 @@ def to_wordgrain_enhanced(
     config: AnalysisConfig,
     word_counts_per_song: list[Counter[str]] | None = None,
     tokens_with_positions: list[TokenWithPosition] | None = None,
-    language: str = "en",
+    language: str | None = None,
 ) -> WordGrainDocument:
     """Convert analysis results to WordGrain format with enhanced NLP fields.
 
@@ -242,13 +270,17 @@ def to_wordgrain_enhanced(
         config: Analysis configuration with NLP options enabled.
         word_counts_per_song: Word counts per song for TF-IDF calculation.
         tokens_with_positions: Tokens with position info for context extraction.
-        language: ISO 639-1 language code.
+        language: ISO 639-1 language code. If None, derived from config.language.
 
     Returns:
         WordGrainDocument with enhanced NLP fields.
     """
     # Collect all words for batch processing
     words = [freq.word for freq in aggregate.frequencies]
+
+    # Resolve language from config if not explicitly provided
+    if language is None:
+        language = resolve_wordgrain_language(config.language, words)
 
     # Compute TF-IDF if enabled
     tfidf_scores: dict[str, float] = {}

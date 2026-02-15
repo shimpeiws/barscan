@@ -17,6 +17,7 @@ from barscan.output.wordgrain import (
     _get_generator_string,
     export_wordgrain,
     generate_filename,
+    resolve_wordgrain_language,
     slugify,
     to_wordgrain,
     to_wordgrain_enhanced,
@@ -195,6 +196,38 @@ class TestGenerateFilename:
     def test_generate_filename_special_chars(self) -> None:
         """Test generating filename with special characters."""
         assert generate_filename("Tyler, the Creator") == "tyler-the-creator.wg.json"
+
+
+class TestResolveWordgrainLanguage:
+    """Tests for resolve_wordgrain_language function."""
+
+    def test_english_maps_to_en(self) -> None:
+        """Test that 'english' maps to 'en'."""
+        assert resolve_wordgrain_language("english") == "en"
+
+    def test_japanese_maps_to_ja(self) -> None:
+        """Test that 'japanese' maps to 'ja'."""
+        assert resolve_wordgrain_language("japanese") == "ja"
+
+    def test_auto_detects_english(self) -> None:
+        """Test that 'auto' detects English from words."""
+        assert resolve_wordgrain_language("auto", ["love", "heart", "soul"]) == "en"
+
+    def test_auto_detects_japanese(self) -> None:
+        """Test that 'auto' detects Japanese from words."""
+        assert resolve_wordgrain_language("auto", ["愛", "心", "魂"]) == "ja"
+
+    def test_auto_without_words_defaults_to_en(self) -> None:
+        """Test that 'auto' without words defaults to 'en'."""
+        assert resolve_wordgrain_language("auto") == "en"
+
+    def test_auto_with_empty_words_defaults_to_en(self) -> None:
+        """Test that 'auto' with empty words list defaults to 'en'."""
+        assert resolve_wordgrain_language("auto", []) == "en"
+
+    def test_unknown_language_defaults_to_en(self) -> None:
+        """Test that unknown language defaults to 'en'."""
+        assert resolve_wordgrain_language("unknown") == "en"
 
 
 class TestToWordgrain:
@@ -479,6 +512,58 @@ class TestToWordgrainEnhanced:
         doc = to_wordgrain_enhanced(
             aggregate=sample_aggregate, config=config, language="ja"
         )
+
+        assert doc.meta.language == "ja"
+
+    def test_enhanced_derives_language_from_config_english(
+        self, sample_aggregate: AggregateAnalysisResult
+    ) -> None:
+        """Test that language is derived from config when not explicitly passed."""
+        config = AnalysisConfig(language="english")
+
+        doc = to_wordgrain_enhanced(aggregate=sample_aggregate, config=config)
+
+        assert doc.meta.language == "en"
+
+    def test_enhanced_derives_language_from_config_japanese(self) -> None:
+        """Test that Japanese config language produces 'ja' output."""
+        frequencies = (
+            WordFrequency(word="愛", count=50, percentage=1.0),
+            WordFrequency(word="心", count=30, percentage=0.6),
+        )
+        aggregate = AggregateAnalysisResult(
+            artist_name="Test Artist",
+            songs_analyzed=2,
+            total_words=1000,
+            unique_words=100,
+            frequencies=frequencies,
+            song_results=(),
+            analyzed_at=datetime(2026, 2, 9, 12, 0, 0, tzinfo=UTC),
+        )
+        config = AnalysisConfig(language="japanese")
+
+        doc = to_wordgrain_enhanced(aggregate=aggregate, config=config)
+
+        assert doc.meta.language == "ja"
+
+    def test_enhanced_derives_language_from_config_auto(self) -> None:
+        """Test that 'auto' config detects language from words."""
+        frequencies = (
+            WordFrequency(word="愛", count=50, percentage=1.0),
+            WordFrequency(word="心", count=30, percentage=0.6),
+        )
+        aggregate = AggregateAnalysisResult(
+            artist_name="Test Artist",
+            songs_analyzed=2,
+            total_words=1000,
+            unique_words=100,
+            frequencies=frequencies,
+            song_results=(),
+            analyzed_at=datetime(2026, 2, 9, 12, 0, 0, tzinfo=UTC),
+        )
+        config = AnalysisConfig(language="auto")
+
+        doc = to_wordgrain_enhanced(aggregate=aggregate, config=config)
 
         assert doc.meta.language == "ja"
 
