@@ -1,12 +1,16 @@
 """Tests for sentiment analysis module."""
 
+from unittest.mock import patch
+
 import pytest
 
 from barscan.analyzer.sentiment import (
+    _load_japanese_dict,
     analyze_sentiment,
     analyze_word_sentiment,
     get_sentiment_scores,
 )
+from barscan.exceptions import NLTKResourceError
 
 
 class TestAnalyzeSentiment:
@@ -117,3 +121,69 @@ class TestGetSentimentScores:
         category, score = value
         assert category in ("positive", "negative", "neutral")
         assert isinstance(score, float)
+
+
+class TestJapaneseSentiment:
+    """Tests for Japanese sentiment analysis."""
+
+    def test_positive_noun(self) -> None:
+        """Test Japanese positive noun (愛 = love)."""
+        category, score = analyze_sentiment("愛", language="japanese")
+        assert category == "positive"
+        assert score == 1.0
+
+    def test_negative_noun(self) -> None:
+        """Test Japanese negative noun (害虫 = pest)."""
+        category, score = analyze_sentiment("害虫", language="japanese")
+        assert category == "negative"
+        assert score == -1.0
+
+    def test_neutral_word(self) -> None:
+        """Test Japanese word not in dictionary."""
+        category, score = analyze_sentiment("りんご", language="japanese")
+        assert category == "neutral"
+        assert score == 0.0
+
+    def test_positive_noun_happiness(self) -> None:
+        """Test Japanese positive noun (幸せ = happiness)."""
+        category, score = analyze_sentiment("幸せ", language="japanese")
+        assert category == "positive"
+        assert score == 1.0
+
+    def test_get_sentiment_scores_japanese(self) -> None:
+        """Test batch sentiment scores for Japanese words."""
+        result = get_sentiment_scores(["愛", "害虫", "りんご"], language="japanese")
+        assert len(result) == 3
+        assert result["愛"][0] == "positive"
+        assert result["害虫"][0] == "negative"
+        assert result["りんご"][0] == "neutral"
+
+    def test_get_sentiment_scores_japanese_empty(self) -> None:
+        """Test empty list for Japanese."""
+        result = get_sentiment_scores([], language="japanese")
+        assert result == {}
+
+    def test_oseti_not_installed(self) -> None:
+        """Test error when oseti is not installed."""
+        import barscan.analyzer.sentiment as mod
+
+        original = mod._ja_dict
+        mod._ja_dict = None
+        try:
+            with patch("barscan.analyzer.sentiment.find_spec", return_value=None):
+                with pytest.raises(NLTKResourceError, match="oseti"):
+                    analyze_sentiment("愛", language="japanese")
+        finally:
+            mod._ja_dict = original
+
+    def test_english_default_unchanged(self) -> None:
+        """Test that default English behavior is not affected."""
+        category, score = analyze_sentiment("love")
+        assert category == "positive"
+        assert score > 0
+
+    def test_load_japanese_dict_singleton(self) -> None:
+        """Test that Japanese dictionary is loaded as singleton."""
+        dict1 = _load_japanese_dict()
+        dict2 = _load_japanese_dict()
+        assert dict1 is dict2
