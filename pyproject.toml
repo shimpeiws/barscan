@@ -36,7 +36,7 @@ Changelog = "https://github.com/shimpeiws/barscan/releases"
 "WordGrain Schema" = "https://github.com/shimpeiws/word-grain"
 
 [project.optional-dependencies]
-japanese = ["janome>=0.5.0", "stopwordsiso>=0.6.1"]
+japanese = ["janome>=0.5.0", "stopwordsiso>=0.6.1", "oseti>=0.4"]
 dev = [
     "pytest>=8.0.0",
     "pytest-cov>=4.1.0",

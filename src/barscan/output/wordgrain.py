@@ -39,6 +39,8 @@ _LANGUAGE_TO_ISO: dict[str, str] = {
     "japanese": "ja",
 }
 
+_ISO_TO_LANGUAGE: dict[str, str] = {v: k for k, v in _LANGUAGE_TO_ISO.items()}
+
 
 def resolve_wordgrain_language(config_language: str, words: list[str] | None = None) -> str:
     """Resolve AnalysisConfig language to ISO 639-1 code for WordGrain output.
@@ -301,7 +303,8 @@ def to_wordgrain_enhanced(
     # Compute sentiment if enabled
     sentiment_scores: dict[str, tuple[str, float]] = {}
     if config.compute_sentiment:
-        sentiment_scores = get_sentiment_scores(words)
+        sentiment_language = _ISO_TO_LANGUAGE.get(language, "english")
+        sentiment_scores = get_sentiment_scores(words, language=sentiment_language)
 
     # Detect slang if enabled
     slang_flags: dict[str, bool] = {}
