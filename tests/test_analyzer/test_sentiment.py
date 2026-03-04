@@ -1,5 +1,6 @@
 """Tests for sentiment analysis module."""
 
+from importlib.util import find_spec
 from unittest.mock import patch
 
 import pytest
@@ -123,33 +124,42 @@ class TestGetSentimentScores:
         assert isinstance(score, float)
 
 
+_has_oseti = find_spec("oseti") is not None
+_requires_oseti = pytest.mark.skipif(not _has_oseti, reason="oseti not installed")
+
+
 class TestJapaneseSentiment:
     """Tests for Japanese sentiment analysis."""
 
+    @_requires_oseti
     def test_positive_noun(self) -> None:
         """Test Japanese positive noun (愛 = love)."""
         category, score = analyze_sentiment("愛", language="japanese")
         assert category == "positive"
         assert score == 1.0
 
+    @_requires_oseti
     def test_negative_noun(self) -> None:
         """Test Japanese negative noun (害虫 = pest)."""
         category, score = analyze_sentiment("害虫", language="japanese")
         assert category == "negative"
         assert score == -1.0
 
+    @_requires_oseti
     def test_neutral_word(self) -> None:
         """Test Japanese word not in dictionary."""
         category, score = analyze_sentiment("りんご", language="japanese")
         assert category == "neutral"
         assert score == 0.0
 
+    @_requires_oseti
     def test_positive_noun_happiness(self) -> None:
         """Test Japanese positive noun (幸せ = happiness)."""
         category, score = analyze_sentiment("幸せ", language="japanese")
         assert category == "positive"
         assert score == 1.0
 
+    @_requires_oseti
     def test_get_sentiment_scores_japanese(self) -> None:
         """Test batch sentiment scores for Japanese words."""
         result = get_sentiment_scores(["愛", "害虫", "りんご"], language="japanese")
@@ -182,6 +192,7 @@ class TestJapaneseSentiment:
         assert category == "positive"
         assert score > 0
 
+    @_requires_oseti
     def test_load_japanese_dict_singleton(self) -> None:
         """Test that Japanese dictionary is loaded as singleton."""
         dict1 = _load_japanese_dict()
