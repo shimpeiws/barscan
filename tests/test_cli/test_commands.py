@@ -439,9 +439,15 @@ class TestAnalyzeCommand:
                 )
 
                 assert result.exit_code == 0
-                assert output_file.exists()
-                content = output_file.read_text()
-                assert "$schema" in content
+                # Output generates {stem}_word.wg.json and {stem}_bar.wg.json
+                word_file = tmp_path / "output_word.wg.json"
+                bar_file = tmp_path / "output_bar.wg.json"
+                assert word_file.exists()
+                assert bar_file.exists()
+                word_content = word_file.read_text()
+                assert "$schema" in word_content
+                bar_content = bar_file.read_text()
+                assert '"type": "bar"' in bar_content
 
     def test_analyze_table_to_file(
         self, cli_runner: CliRunner, mock_settings, mock_artist_with_songs, mock_lyrics, tmp_path
@@ -605,27 +611,6 @@ class TestConfigCommand:
 
                 assert result.exit_code == 0
                 assert "Not set" in result.output
-
-
-class TestFormatOutputFunction:
-    """Tests for format_output function."""
-
-    def test_format_output_wordgrain_requires_aggregate(self, cli_runner: CliRunner):
-        """Test that wordgrain format requires aggregate parameter."""
-        from barscan.cli import OutputFormat, format_output
-
-        import pytest
-
-        with pytest.raises(ValueError, match="aggregate is required"):
-            format_output(
-                artist_name="Test",
-                songs_analyzed=1,
-                total_words=100,
-                unique_words=50,
-                frequencies=[],
-                output_format=OutputFormat.WORDGRAIN,
-                aggregate=None,  # Missing aggregate
-            )
 
 
 class TestValidation:
