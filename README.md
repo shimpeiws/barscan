@@ -213,18 +213,30 @@ know,65,1.20
 
 [WordGrain](https://github.com/shimpeiws/word-grain) is a standardized JSON schema for vocabulary analysis data. It enables interoperability between different word frequency analysis tools. See the [documentation](https://shimpeiws.github.io/word-grain/) for details.
 
-Output example:
+You can select the schema version with `--wordgrain-schema` (default: `0.2.0`):
+
+```bash
+# Use default v0.2.0 schema
+barscan analyze "Kendrick Lamar" --format wordgrain
+
+# Use v0.1.0 schema (backward compatible)
+barscan analyze "Kendrick Lamar" --format wordgrain --wordgrain-schema 0.1.0
+```
+
+Output example (v0.2.0):
 
 ```json
 {
-  "$schema": "https://raw.githubusercontent.com/shimpeiws/word-grain/main/schema/v0.1.0/wordgrain.schema.json",
+  "$schema": "https://raw.githubusercontent.com/shimpeiws/word-grain/main/schema/v0.2.0/wordgrain.schema.json",
+  "schema_version": "0.2.0",
+  "type": "word",
   "meta": {
     "source": "genius",
     "artist": "Kendrick Lamar",
     "generated_at": "2024-01-15T10:30:00Z",
     "corpus_size": 10,
     "total_words": 5432,
-    "generator": "barscan/0.1.0",
+    "generator": "barscan/0.3.0",
     "language": "en"
   },
   "grains": [
