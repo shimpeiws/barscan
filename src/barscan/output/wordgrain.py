@@ -104,33 +104,35 @@ class WordGrainGrain(BaseModel, frozen=True):
 
 
 _VALID_MOODS = frozenset({
-    "aggressive", "melancholic", "euphoric", "reflective",
-    "romantic", "defiant", "playful", "dark",
+    "aggressive", "melancholic", "triumphant", "reflective",
+    "humorous", "romantic", "defiant", "hopeful", "dark", "celebratory",
 })
 
 
 class BarSource(BaseModel, frozen=True):
     """Source metadata for a bar grain entry."""
 
-    artist: str = Field(..., min_length=1)
     track: str = Field(..., min_length=1)
     album: str | None = Field(default=None)
     year: int | None = Field(default=None)
-    featuring: str | None = Field(default=None)
+    featuring: tuple[str, ...] | None = Field(default=None)
+    timestamp: str | None = Field(default=None)
 
 
 class BarMetrics(BaseModel, frozen=True):
     """Metrics for a bar grain entry."""
 
-    lines: int = Field(..., ge=1)
-    syllables: int | None = Field(default=None)
-    mora: int | None = Field(default=None)
+    syllable_count: int | None = Field(default=None)
+    word_count: int | None = Field(default=None)
+    rhyme_density: float | None = Field(default=None)
 
 
 class BarSemantics(BaseModel, frozen=True):
     """Semantics for a bar grain entry."""
 
     mood: str | None = Field(default=None)
+    themes: tuple[str, ...] | None = Field(default=None)
+    techniques: tuple[str, ...] | None = Field(default=None)
 
     @field_validator("mood")
     @classmethod
@@ -149,29 +151,6 @@ class BarGrainEntry(BaseModel, frozen=True):
     metrics: BarMetrics | None = Field(default=None)
     semantics: BarSemantics | None = Field(default=None)
     language: str = Field(default="en")
-
-
-class BarGrainDocument(BaseModel, frozen=True):
-    """Root WordGrain document structure for bar type."""
-
-    schema_: str = Field(
-        default=WORDGRAIN_SCHEMA_URL,
-        alias="$schema",
-        description="JSON Schema URL",
-    )
-    schema_version: str | None = Field(
-        default=None,
-        description="Schema version (v0.2.0+)",
-    )
-    type_: str | None = Field(
-        default=None,
-        alias="type",
-        description="Document type discriminator (v0.2.0+)",
-    )
-    meta: WordGrainMeta = Field(..., description="Document metadata")
-    grains: tuple[BarGrainEntry, ...] = Field(
-        default_factory=tuple, description="List of bar entries"
-    )
 
 
 class WordGrainMeta(BaseModel, frozen=True):
@@ -197,14 +176,14 @@ class WordGrainMeta(BaseModel, frozen=True):
 
 
 class WordGrainDocument(BaseModel, frozen=True):
-    """Root WordGrain document structure.
+    """Root WordGrain document structure (unified format).
 
     Attributes:
         schema_: JSON Schema URL (serialized as $schema).
         schema_version: Schema version string (v0.2.0+).
-        type_: Document type discriminator (v0.2.0+).
         meta: Document metadata.
-        grains: List of word entries.
+        grains: List of word entries (vocabulary).
+        bars: List of bar entries (lyric lines).
     """
 
     schema_: str = Field(
@@ -216,14 +195,12 @@ class WordGrainDocument(BaseModel, frozen=True):
         default=None,
         description="Schema version (v0.2.0+)",
     )
-    type_: str | None = Field(
-        default=None,
-        alias="type",
-        description="Document type discriminator (v0.2.0+)",
-    )
     meta: WordGrainMeta = Field(..., description="Document metadata")
     grains: tuple[WordGrainGrain, ...] = Field(
         default_factory=tuple, description="List of word entries"
+    )
+    bars: tuple[BarGrainEntry, ...] | None = Field(
+        default=None, description="List of bar entries"
     )
 
 
@@ -275,13 +252,12 @@ def _get_generator_string() -> str:
     return f"barscan/{ver}"
 
 
-def _version_fields(schema_version: str, wordgrain_type: str = "word") -> dict[str, str]:
+def _version_fields(schema_version: str) -> dict[str, str]:
     """Return version-specific fields for WordGrainDocument constructor."""
     schema_url = WORDGRAIN_SCHEMA_URLS.get(schema_version, WORDGRAIN_SCHEMA_URL)
     fields: dict[str, str] = {"$schema": schema_url}
     if schema_version >= "0.2.0":
         fields["schema_version"] = schema_version
-        fields["type"] = wordgrain_type
     return fields
 
 
@@ -327,14 +303,14 @@ def to_wordgrain(
     )
 
     return WordGrainDocument(
-        **_version_fields(schema_version),
+        **_version_fields(schema_version),  # type: ignore[arg-type]
         meta=meta,
         grains=tuple(grains),
     )
 
 
 def export_wordgrain(
-    document: WordGrainDocument | BarGrainDocument,
+    document: WordGrainDocument,
     indent: int = 2,
 ) -> str:
     """Export WordGrain document to JSON string.
@@ -477,7 +453,7 @@ def to_wordgrain_enhanced(
     )
 
     return WordGrainDocument(
-        **_version_fields(schema_version),
+        **_version_fields(schema_version),  # type: ignore[arg-type]
         meta=meta,
         grains=tuple(grains),
     )
@@ -488,7 +464,7 @@ def to_wordgrain_bar(
     artist_name: str,
     language: str = "en",
     schema_version: str = DEFAULT_WORDGRAIN_SCHEMA_VERSION,
-) -> BarGrainDocument:
+) -> WordGrainDocument:
     """Convert lyrics data to WordGrain bar format (line-level).
 
     Args:
@@ -498,17 +474,17 @@ def to_wordgrain_bar(
         schema_version: WordGrain schema version (must be >= 0.2.0).
 
     Returns:
-        BarGrainDocument with one grain per lyric line.
+        WordGrainDocument with bars field containing one entry per lyric line.
 
     Raises:
-        ValueError: If schema_version < 0.2.0 (bar type requires v0.2.0+).
+        ValueError: If schema_version < 0.2.0 (bars require v0.2.0+).
     """
     if schema_version < "0.2.0":
         raise ValueError(
             f"Bar type requires WordGrain schema >= 0.2.0, got '{schema_version}'"
         )
 
-    grains: list[BarGrainEntry] = []
+    bars: list[BarGrainEntry] = []
     corpus_size = 0
 
     for lyrics_text, _song_id, song_title in lyrics_data:
@@ -518,11 +494,10 @@ def to_wordgrain_bar(
             stripped = line.strip()
             if not stripped:
                 continue
-            grains.append(
+            bars.append(
                 BarGrainEntry(
                     text=stripped,
-                    source=BarSource(artist=artist_name, track=song_title),
-                    metrics=BarMetrics(lines=1),
+                    source=BarSource(track=song_title),
                     language=language,
                 )
             )
@@ -532,13 +507,13 @@ def to_wordgrain_bar(
         artist=artist_name,
         generated_at=datetime.now(),
         corpus_size=corpus_size,
-        total_words=len(grains),
+        total_words=len(bars),
         generator=_get_generator_string(),
         language=language,
     )
 
-    return BarGrainDocument(
-        **_version_fields(schema_version, "bar"),
+    return WordGrainDocument(
+        **_version_fields(schema_version),  # type: ignore[arg-type]
         meta=meta,
-        grains=tuple(grains),
+        bars=tuple(bars),
     )

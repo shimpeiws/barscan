@@ -13,7 +13,6 @@ from barscan.output.wordgrain import (
     DEFAULT_WORDGRAIN_SCHEMA_VERSION,
     WORDGRAIN_SCHEMA_URL,
     WORDGRAIN_SCHEMA_URLS,
-    BarGrainDocument,
     BarGrainEntry,
     BarMetrics,
     BarSemantics,
@@ -149,11 +148,10 @@ class TestWordGrainDocument:
         assert doc.schema_ == WORDGRAIN_SCHEMA_URLS["0.2.0"]
 
     def test_document_v020_fields(self) -> None:
-        """Test v0.2.0 fields (schema_version, type)."""
+        """Test v0.2.0 fields (schema_version, no type)."""
         doc = WordGrainDocument(
             **{"$schema": WORDGRAIN_SCHEMA_URLS["0.2.0"]},
             schema_version="0.2.0",
-            **{"type": "word"},
             meta=WordGrainMeta(
                 artist="Test",
                 generated_at=datetime.now(UTC),
@@ -164,10 +162,9 @@ class TestWordGrainDocument:
             grains=(),
         )
         assert doc.schema_version == "0.2.0"
-        assert doc.type_ == "word"
 
     def test_document_v010_no_extra_fields(self) -> None:
-        """Test v0.1.0 document has no schema_version or type."""
+        """Test v0.1.0 document has no schema_version."""
         doc = WordGrainDocument(
             **{"$schema": WORDGRAIN_SCHEMA_URLS["0.1.0"]},
             meta=WordGrainMeta(
@@ -180,7 +177,6 @@ class TestWordGrainDocument:
             grains=(),
         )
         assert doc.schema_version is None
-        assert doc.type_ is None
 
     def test_schema_field_alias(self) -> None:
         """Test that $schema field is serialized correctly."""
@@ -199,6 +195,61 @@ class TestWordGrainDocument:
         assert "$schema" in data
         assert "schema_" not in data
         assert data["$schema"] == WORDGRAIN_SCHEMA_URL
+
+    def test_document_with_bars(self) -> None:
+        """Test creating a unified document with both grains and bars."""
+        meta = WordGrainMeta(
+            artist="Test Artist",
+            generated_at=datetime.now(UTC),
+            corpus_size=2,
+            total_words=100,
+            generator="barscan/0.3.0",
+        )
+        grains = (
+            WordGrainGrain(word="love", frequency=50, frequency_normalized=500.0),
+        )
+        bars = (
+            BarGrainEntry(
+                text="I got love in my heart",
+                source=BarSource(track="Song 1"),
+                language="en",
+            ),
+        )
+        doc = WordGrainDocument(
+            **{"$schema": WORDGRAIN_SCHEMA_URLS["0.2.0"]},
+            schema_version="0.2.0",
+            meta=meta,
+            grains=grains,
+            bars=bars,
+        )
+        assert len(doc.grains) == 1
+        assert doc.bars is not None
+        assert len(doc.bars) == 1
+        assert doc.bars[0].text == "I got love in my heart"
+
+    def test_unified_document_serialization(self) -> None:
+        """Test that unified document serializes with both grains and bars."""
+        meta = WordGrainMeta(
+            artist="Test",
+            generated_at=datetime.now(UTC),
+            corpus_size=1,
+            total_words=10,
+            generator="barscan/0.3.0",
+        )
+        doc = WordGrainDocument(
+            **{"$schema": WORDGRAIN_SCHEMA_URLS["0.2.0"]},
+            schema_version="0.2.0",
+            meta=meta,
+            grains=(WordGrainGrain(word="test", frequency=1, frequency_normalized=100.0),),
+            bars=(BarGrainEntry(text="test line", source=BarSource(track="Song"), language="en"),),
+        )
+        json_str = export_wordgrain(doc)
+        data = json.loads(json_str)
+        assert "grains" in data
+        assert "bars" in data
+        assert "type" not in data
+        assert len(data["grains"]) == 1
+        assert len(data["bars"]) == 1
 
 
 class TestSlugify:
@@ -328,18 +379,16 @@ class TestToWordgrain:
         assert doc.meta.language == "es"
 
     def test_default_schema_version(self, sample_aggregate: AggregateAnalysisResult) -> None:
-        """Test default schema version is 0.2.0 with schema_version and type fields."""
+        """Test default schema version is 0.2.0 with schema_version field."""
         doc = to_wordgrain(sample_aggregate)
         assert doc.schema_ == WORDGRAIN_SCHEMA_URLS["0.2.0"]
         assert doc.schema_version == "0.2.0"
-        assert doc.type_ == "word"
 
     def test_schema_version_010(self, sample_aggregate: AggregateAnalysisResult) -> None:
-        """Test schema version 0.1.0 has no schema_version or type fields."""
+        """Test schema version 0.1.0 has no schema_version field."""
         doc = to_wordgrain(sample_aggregate, schema_version="0.1.0")
         assert doc.schema_ == WORDGRAIN_SCHEMA_URLS["0.1.0"]
         assert doc.schema_version is None
-        assert doc.type_ is None
 
     def test_zero_total_words(self) -> None:
         """Test handling of zero total_words."""
@@ -392,12 +441,11 @@ class TestExportWordgrain:
         assert "$schema" in data
         assert data["$schema"] == WORDGRAIN_SCHEMA_URL
 
-    def test_export_v020_includes_schema_version_and_type(self) -> None:
-        """Test that v0.2.0 export includes schema_version and type."""
+    def test_export_v020_includes_schema_version(self) -> None:
+        """Test that v0.2.0 export includes schema_version but no type."""
         doc = WordGrainDocument(
             **{"$schema": WORDGRAIN_SCHEMA_URLS["0.2.0"]},
             schema_version="0.2.0",
-            **{"type": "word"},
             meta=WordGrainMeta(
                 artist="Test",
                 generated_at=datetime.now(UTC),
@@ -410,10 +458,10 @@ class TestExportWordgrain:
         json_str = export_wordgrain(doc)
         data = json.loads(json_str)
         assert data["schema_version"] == "0.2.0"
-        assert data["type"] == "word"
+        assert "type" not in data
 
-    def test_export_v010_excludes_schema_version_and_type(self) -> None:
-        """Test that v0.1.0 export excludes schema_version and type."""
+    def test_export_v010_excludes_schema_version(self) -> None:
+        """Test that v0.1.0 export excludes schema_version."""
         doc = WordGrainDocument(
             **{"$schema": WORDGRAIN_SCHEMA_URLS["0.1.0"]},
             meta=WordGrainMeta(
@@ -683,7 +731,6 @@ class TestToWordgrainEnhanced:
         doc = to_wordgrain_enhanced(aggregate=sample_aggregate, config=config)
         assert doc.schema_ == WORDGRAIN_SCHEMA_URLS["0.2.0"]
         assert doc.schema_version == "0.2.0"
-        assert doc.type_ == "word"
 
     def test_enhanced_schema_version_010(
         self, sample_aggregate: AggregateAnalysisResult
@@ -695,7 +742,6 @@ class TestToWordgrainEnhanced:
         )
         assert doc.schema_ == WORDGRAIN_SCHEMA_URLS["0.1.0"]
         assert doc.schema_version is None
-        assert doc.type_ is None
 
 
 class TestBarGrainModels:
@@ -703,73 +749,93 @@ class TestBarGrainModels:
 
     def test_bar_source_creation(self) -> None:
         """Test creating a BarSource."""
-        source = BarSource(artist="Kendrick Lamar", track="HUMBLE.")
-        assert source.artist == "Kendrick Lamar"
+        source = BarSource(track="HUMBLE.")
         assert source.track == "HUMBLE."
         assert source.album is None
         assert source.year is None
         assert source.featuring is None
+        assert source.timestamp is None
 
     def test_bar_source_with_optional_fields(self) -> None:
         """Test BarSource with all optional fields."""
         source = BarSource(
-            artist="Kendrick Lamar",
             track="HUMBLE.",
             album="DAMN.",
             year=2017,
-            featuring="feat. Someone",
+            featuring=("Someone",),
+            timestamp="01:23",
         )
         assert source.album == "DAMN."
         assert source.year == 2017
-
-    def test_bar_source_empty_artist_rejected(self) -> None:
-        """Test that empty artist is rejected."""
-        with pytest.raises(ValidationError):
-            BarSource(artist="", track="Test")
+        assert source.featuring == ("Someone",)
+        assert source.timestamp == "01:23"
 
     def test_bar_source_empty_track_rejected(self) -> None:
         """Test that empty track is rejected."""
         with pytest.raises(ValidationError):
-            BarSource(artist="Test", track="")
+            BarSource(track="")
 
     def test_bar_metrics_creation(self) -> None:
         """Test creating BarMetrics."""
-        metrics = BarMetrics(lines=1)
-        assert metrics.lines == 1
-        assert metrics.syllables is None
-        assert metrics.mora is None
+        metrics = BarMetrics(syllable_count=5, word_count=3)
+        assert metrics.syllable_count == 5
+        assert metrics.word_count == 3
+        assert metrics.rhyme_density is None
 
-    def test_bar_metrics_zero_lines_rejected(self) -> None:
-        """Test that zero lines is rejected."""
-        with pytest.raises(ValidationError):
-            BarMetrics(lines=0)
+    def test_bar_metrics_all_optional(self) -> None:
+        """Test that all BarMetrics fields are optional."""
+        metrics = BarMetrics()
+        assert metrics.syllable_count is None
+        assert metrics.word_count is None
+        assert metrics.rhyme_density is None
 
     def test_bar_semantics_valid_mood(self) -> None:
         """Test BarSemantics with valid mood."""
         sem = BarSemantics(mood="aggressive")
         assert sem.mood == "aggressive"
 
+    def test_bar_semantics_new_moods(self) -> None:
+        """Test BarSemantics with new v0.2.0 moods."""
+        for mood in ("triumphant", "humorous", "hopeful", "celebratory"):
+            sem = BarSemantics(mood=mood)
+            assert sem.mood == mood
+
     def test_bar_semantics_invalid_mood_rejected(self) -> None:
         """Test BarSemantics with invalid mood."""
         with pytest.raises(ValidationError):
             BarSemantics(mood="happy")
+
+    def test_bar_semantics_removed_moods_rejected(self) -> None:
+        """Test that removed moods (euphoric, playful) are rejected."""
+        with pytest.raises(ValidationError):
+            BarSemantics(mood="euphoric")
+        with pytest.raises(ValidationError):
+            BarSemantics(mood="playful")
 
     def test_bar_semantics_none_mood(self) -> None:
         """Test BarSemantics with no mood."""
         sem = BarSemantics()
         assert sem.mood is None
 
+    def test_bar_semantics_themes_and_techniques(self) -> None:
+        """Test BarSemantics with themes and techniques."""
+        sem = BarSemantics(
+            mood="defiant",
+            themes=("struggle", "resilience"),
+            techniques=("metaphor", "alliteration"),
+        )
+        assert sem.themes == ("struggle", "resilience")
+        assert sem.techniques == ("metaphor", "alliteration")
+
     def test_bar_grain_entry_creation(self) -> None:
         """Test creating a BarGrainEntry."""
         entry = BarGrainEntry(
             text="I got loyalty, got royalty inside my DNA",
-            source=BarSource(artist="Kendrick Lamar", track="DNA."),
-            metrics=BarMetrics(lines=1),
+            source=BarSource(track="DNA."),
             language="en",
         )
         assert entry.text == "I got loyalty, got royalty inside my DNA"
-        assert entry.source.artist == "Kendrick Lamar"
-        assert entry.metrics.lines == 1
+        assert entry.source.track == "DNA."
         assert entry.language == "en"
 
     def test_bar_grain_entry_empty_text_rejected(self) -> None:
@@ -777,124 +843,49 @@ class TestBarGrainModels:
         with pytest.raises(ValidationError):
             BarGrainEntry(
                 text="",
-                source=BarSource(artist="Test", track="Test"),
+                source=BarSource(track="Test"),
             )
 
     def test_bar_grain_entry_is_frozen(self) -> None:
         """Test that BarGrainEntry is immutable."""
         entry = BarGrainEntry(
             text="test line",
-            source=BarSource(artist="Test", track="Test"),
+            source=BarSource(track="Test"),
         )
         with pytest.raises(ValidationError):
             entry.text = "new text"  # type: ignore[misc]
 
 
-class TestBarGrainDocument:
-    """Tests for BarGrainDocument model."""
-
-    def test_create_bar_document(self) -> None:
-        """Test creating a BarGrainDocument."""
-        meta = WordGrainMeta(
-            artist="Test Artist",
-            generated_at=datetime.now(UTC),
-            corpus_size=1,
-            total_words=2,
-            generator="barscan/0.3.0",
-        )
-        grains = (
-            BarGrainEntry(
-                text="line one",
-                source=BarSource(artist="Test Artist", track="Song 1"),
-                metrics=BarMetrics(lines=1),
-            ),
-            BarGrainEntry(
-                text="line two",
-                source=BarSource(artist="Test Artist", track="Song 1"),
-                metrics=BarMetrics(lines=1),
-            ),
-        )
-        doc = BarGrainDocument(
-            **{"$schema": WORDGRAIN_SCHEMA_URLS["0.2.0"]},
-            schema_version="0.2.0",
-            **{"type": "bar"},
-            meta=meta,
-            grains=grains,
-        )
-        assert doc.type_ == "bar"
-        assert doc.schema_version == "0.2.0"
-        assert len(doc.grains) == 2
-
-    def test_bar_document_serialization(self) -> None:
-        """Test BarGrainDocument serializes with correct type."""
-        meta = WordGrainMeta(
-            artist="Test",
-            generated_at=datetime.now(UTC),
-            corpus_size=1,
-            total_words=1,
-            generator="barscan/0.3.0",
-        )
-        doc = BarGrainDocument(
-            **{"$schema": WORDGRAIN_SCHEMA_URLS["0.2.0"]},
-            schema_version="0.2.0",
-            **{"type": "bar"},
-            meta=meta,
-            grains=(
-                BarGrainEntry(
-                    text="test line",
-                    source=BarSource(artist="Test", track="Song"),
-                    metrics=BarMetrics(lines=1),
-                ),
-            ),
-        )
-        json_str = doc.model_dump_json(by_alias=True, exclude_none=True)
-        data = json.loads(json_str)
-        assert data["type"] == "bar"
-        assert data["schema_version"] == "0.2.0"
-        assert data["grains"][0]["text"] == "test line"
-
-
 class TestVersionFields:
     """Tests for _version_fields function."""
 
-    def test_version_fields_word_type(self) -> None:
-        """Test _version_fields with default word type."""
+    def test_version_fields_020(self) -> None:
+        """Test _version_fields for v0.2.0."""
         fields = _version_fields("0.2.0")
-        assert fields["type"] == "word"
         assert fields["schema_version"] == "0.2.0"
+        assert "type" not in fields
 
-    def test_version_fields_bar_type(self) -> None:
-        """Test _version_fields with bar type."""
-        fields = _version_fields("0.2.0", "bar")
-        assert fields["type"] == "bar"
-        assert fields["schema_version"] == "0.2.0"
-
-    def test_version_fields_010_no_type(self) -> None:
-        """Test _version_fields for v0.1.0 has no type or schema_version."""
+    def test_version_fields_010_no_schema_version(self) -> None:
+        """Test _version_fields for v0.1.0 has no schema_version."""
         fields = _version_fields("0.1.0")
         assert "type" not in fields
         assert "schema_version" not in fields
-
-    def test_version_fields_010_bar_type_ignored(self) -> None:
-        """Test _version_fields for v0.1.0 ignores bar type."""
-        fields = _version_fields("0.1.0", "bar")
-        assert "type" not in fields
 
 
 class TestToWordgrainBar:
     """Tests for to_wordgrain_bar function."""
 
     def test_basic_conversion(self) -> None:
-        """Test basic conversion from lyrics to bar grains."""
+        """Test basic conversion from lyrics to bar entries."""
         lyrics_data = [
             ("First line\nSecond line", 1, "Song One"),
         ]
         doc = to_wordgrain_bar(lyrics_data, artist_name="Test Artist")
-        assert len(doc.grains) == 2
-        assert doc.grains[0].text == "First line"
-        assert doc.grains[1].text == "Second line"
-        assert doc.grains[0].source.artist == "Test Artist"
-        assert doc.grains[0].source.track == "Song One"
+        assert doc.bars is not None
+        assert len(doc.bars) == 2
+        assert doc.bars[0].text == "First line"
+        assert doc.bars[1].text == "Second line"
+        assert doc.bars[0].source.track == "Song One"
 
     def test_multiple_songs(self) -> None:
         """Test conversion with multiple songs."""
@@ -903,9 +894,10 @@ class TestToWordgrainBar:
             ("Line from song 2", 2, "Song Two"),
         ]
         doc = to_wordgrain_bar(lyrics_data, artist_name="Test Artist")
-        assert len(doc.grains) == 2
-        assert doc.grains[0].source.track == "Song One"
-        assert doc.grains[1].source.track == "Song Two"
+        assert doc.bars is not None
+        assert len(doc.bars) == 2
+        assert doc.bars[0].source.track == "Song One"
+        assert doc.bars[1].source.track == "Song Two"
         assert doc.meta.corpus_size == 2
 
     def test_empty_lines_skipped(self) -> None:
@@ -914,21 +906,23 @@ class TestToWordgrainBar:
             ("Line one\n\nLine two\n  \nLine three", 1, "Song"),
         ]
         doc = to_wordgrain_bar(lyrics_data, artist_name="Test")
-        assert len(doc.grains) == 3
+        assert doc.bars is not None
+        assert len(doc.bars) == 3
 
-    def test_metrics_lines_always_one(self) -> None:
-        """Test that each grain has metrics.lines = 1."""
+    def test_no_metrics_by_default(self) -> None:
+        """Test that bars have no metrics by default."""
         lyrics_data = [("A line", 1, "Song")]
         doc = to_wordgrain_bar(lyrics_data, artist_name="Test")
-        assert doc.grains[0].metrics is not None
-        assert doc.grains[0].metrics.lines == 1
+        assert doc.bars is not None
+        assert doc.bars[0].metrics is None
 
     def test_language_propagation(self) -> None:
-        """Test that language is propagated to grains and meta."""
+        """Test that language is propagated to bars and meta."""
         lyrics_data = [("テスト", 1, "Song")]
         doc = to_wordgrain_bar(lyrics_data, artist_name="Test", language="ja")
         assert doc.meta.language == "ja"
-        assert doc.grains[0].language == "ja"
+        assert doc.bars is not None
+        assert doc.bars[0].language == "ja"
 
     def test_total_words_is_line_count(self) -> None:
         """Test that meta.total_words equals total line count for bar type."""
@@ -938,12 +932,13 @@ class TestToWordgrainBar:
         doc = to_wordgrain_bar(lyrics_data, artist_name="Test")
         assert doc.meta.total_words == 3
 
-    def test_type_is_bar(self) -> None:
-        """Test that document type is 'bar'."""
+    def test_no_type_field(self) -> None:
+        """Test that document has no type field (unified format)."""
         lyrics_data = [("A line", 1, "Song")]
         doc = to_wordgrain_bar(lyrics_data, artist_name="Test")
-        assert doc.type_ == "bar"
         assert doc.schema_version == "0.2.0"
+        # No type_ attribute in unified format
+        assert not hasattr(doc, "type_") or not hasattr(WordGrainDocument, "type_")
 
     def test_schema_below_020_raises_error(self) -> None:
         """Test that schema version below 0.2.0 raises ValueError."""
@@ -957,8 +952,19 @@ class TestToWordgrainBar:
             ("Chorus line\nVerse line\nChorus line", 1, "Song"),
         ]
         doc = to_wordgrain_bar(lyrics_data, artist_name="Test")
-        assert len(doc.grains) == 3
-        assert doc.grains[0].text == doc.grains[2].text
+        assert doc.bars is not None
+        assert len(doc.bars) == 3
+        assert doc.bars[0].text == doc.bars[2].text
+
+    def test_artist_in_meta_not_source(self) -> None:
+        """Test that artist is in meta, not in bar source."""
+        lyrics_data = [("A line", 1, "Song")]
+        doc = to_wordgrain_bar(lyrics_data, artist_name="Test Artist")
+        assert doc.meta.artist == "Test Artist"
+        assert doc.bars is not None
+        # BarSource should not have artist field
+        source_data = doc.bars[0].source.model_dump()
+        assert "artist" not in source_data
 
 
 class TestExportWordgrainBar:
@@ -970,11 +976,12 @@ class TestExportWordgrainBar:
         doc = to_wordgrain_bar(lyrics_data, artist_name="Test Artist")
         json_str = export_wordgrain(doc)
         data = json.loads(json_str)
-        assert data["type"] == "bar"
+        assert "type" not in data
         assert data["schema_version"] == "0.2.0"
-        assert len(data["grains"]) == 2
-        assert data["grains"][0]["text"] == "Test line one"
-        assert data["grains"][0]["source"]["artist"] == "Test Artist"
-        assert data["grains"][0]["source"]["track"] == "Song"
-        assert data["grains"][0]["metrics"]["lines"] == 1
-        assert data["grains"][0]["language"] == "en"
+        assert "bars" in data
+        assert len(data["bars"]) == 2
+        assert data["bars"][0]["text"] == "Test line one"
+        assert data["bars"][0]["source"]["track"] == "Song"
+        assert "artist" not in data["bars"][0]["source"]
+        assert data["bars"][0]["language"] == "en"
+        assert data["meta"]["artist"] == "Test Artist"

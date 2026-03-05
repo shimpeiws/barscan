@@ -379,7 +379,7 @@ def _output_wordgrain(
     lyrics_data: list[tuple[str, int, str]],
     output_file: Path | None,
 ) -> None:
-    """Generate and output both word and bar WordGrain documents."""
+    """Generate and output a unified WordGrain document with grains and bars."""
     # Resolve language
     wg_language = (
         resolve_wordgrain_language(config.language, [f.word for f in aggregate.frequencies])
@@ -387,9 +387,9 @@ def _output_wordgrain(
         else "en"
     )
 
-    # Generate word document
+    # Generate word document (contains grains)
     if config is not None:
-        word_doc = to_wordgrain_enhanced(
+        doc = to_wordgrain_enhanced(
             aggregate=aggregate,
             config=config,
             word_counts_per_song=word_counts_per_song,
@@ -398,11 +398,9 @@ def _output_wordgrain(
             schema_version=schema_version,
         )
     else:
-        word_doc = to_wordgrain(aggregate, language=wg_language, schema_version=schema_version)
-    word_json = export_wordgrain(word_doc)
+        doc = to_wordgrain(aggregate, language=wg_language, schema_version=schema_version)
 
-    # Generate bar document (only for schema >= 0.2.0)
-    bar_json: str | None = None
+    # Merge bar entries into unified document (only for schema >= 0.2.0)
     if schema_version >= "0.2.0":
         bar_doc = to_wordgrain_bar(
             lyrics_data=lyrics_data,
@@ -410,30 +408,26 @@ def _output_wordgrain(
             language=wg_language,
             schema_version=schema_version,
         )
-        bar_json = export_wordgrain(bar_doc)
+        # Create unified document with both grains and bars
+        from barscan.output.wordgrain import WordGrainDocument
+
+        doc = WordGrainDocument(
+            **{"$schema": doc.schema_},
+            schema_version=doc.schema_version,
+            meta=doc.meta,
+            grains=doc.grains,
+            bars=bar_doc.bars,
+        )
+
+    json_str = export_wordgrain(doc)
 
     if output_file:
-        # Write word file
-        stem = output_file.stem.removesuffix(".wg")
-        parent = output_file.parent
-        word_path = parent / f"{stem}_word.wg.json"
-        word_path.write_text(word_json, encoding="utf-8")
-        console.print(f"Results written to [bold]{word_path}[/bold]")
-
-        # Write bar file
-        if bar_json is not None:
-            bar_path = parent / f"{stem}_bar.wg.json"
-            bar_path.write_text(bar_json, encoding="utf-8")
-            console.print(f"Results written to [bold]{bar_path}[/bold]")
+        output_file.write_text(json_str, encoding="utf-8")
+        console.print(f"Results written to [bold]{output_file}[/bold]")
     else:
         suggested = generate_filename(aggregate.artist_name)
-        stem = suggested.removesuffix(".wg.json")
-        console.print(f"[dim]Suggested filename: {stem}_word.wg.json[/dim]")
-        console.print(word_json)
-        if bar_json is not None:
-            console.print()
-            console.print(f"[dim]Suggested filename: {stem}_bar.wg.json[/dim]")
-            console.print(bar_json)
+        console.print(f"[dim]Suggested filename: {suggested}[/dim]")
+        console.print(json_str)
 
 
 def format_output(

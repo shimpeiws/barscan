@@ -439,15 +439,13 @@ class TestAnalyzeCommand:
                 )
 
                 assert result.exit_code == 0
-                # Output generates {stem}_word.wg.json and {stem}_bar.wg.json
-                word_file = tmp_path / "output_word.wg.json"
-                bar_file = tmp_path / "output_bar.wg.json"
-                assert word_file.exists()
-                assert bar_file.exists()
-                word_content = word_file.read_text()
-                assert "$schema" in word_content
-                bar_content = bar_file.read_text()
-                assert '"type": "bar"' in bar_content
+                # Output is a single unified file
+                assert output_file.exists()
+                content = json.loads(output_file.read_text())
+                assert "$schema" in content
+                assert "grains" in content
+                assert "bars" in content
+                assert "type" not in content
 
     def test_analyze_table_to_file(
         self, cli_runner: CliRunner, mock_settings, mock_artist_with_songs, mock_lyrics, tmp_path
