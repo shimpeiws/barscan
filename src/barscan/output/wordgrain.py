@@ -4,7 +4,7 @@ This module provides Pydantic models and functions to export analysis results
 in the WordGrain JSON format (.wg.json), a standardized schema for vocabulary
 analysis data.
 
-Reference: https://raw.githubusercontent.com/shimpeiws/word-grain/main/schema/v0.1.0/wordgrain.schema.json
+Reference: https://raw.githubusercontent.com/shimpeiws/word-grain/main/schema/v0.2.0/wordgrain.schema.json
 """
 
 from __future__ import annotations
@@ -31,7 +31,14 @@ from barscan.analyzer.slang import detect_slang_words
 from barscan.analyzer.tfidf import calculate_corpus_tfidf
 from barscan.analyzer.tokenizer import detect_language
 
-WORDGRAIN_SCHEMA_URL = "https://raw.githubusercontent.com/shimpeiws/word-grain/main/schema/v0.1.0/wordgrain.schema.json"
+WORDGRAIN_SCHEMA_URLS: dict[str, str] = {
+    "0.1.0": "https://raw.githubusercontent.com/shimpeiws/word-grain/main/schema/v0.1.0/wordgrain.schema.json",
+    "0.2.0": "https://raw.githubusercontent.com/shimpeiws/word-grain/main/schema/v0.2.0/wordgrain.schema.json",
+}
+
+DEFAULT_WORDGRAIN_SCHEMA_VERSION = "0.2.0"
+
+WORDGRAIN_SCHEMA_URL = WORDGRAIN_SCHEMA_URLS[DEFAULT_WORDGRAIN_SCHEMA_VERSION]
 
 # Mapping from AnalysisConfig language names to ISO 639-1 codes
 _LANGUAGE_TO_ISO: dict[str, str] = {
@@ -122,6 +129,8 @@ class WordGrainDocument(BaseModel, frozen=True):
 
     Attributes:
         schema_: JSON Schema URL (serialized as $schema).
+        schema_version: Schema version string (v0.2.0+).
+        type_: Document type discriminator (v0.2.0+).
         meta: Document metadata.
         grains: List of word entries.
     """
@@ -130,6 +139,15 @@ class WordGrainDocument(BaseModel, frozen=True):
         default=WORDGRAIN_SCHEMA_URL,
         alias="$schema",
         description="JSON Schema URL",
+    )
+    schema_version: str | None = Field(
+        default=None,
+        description="Schema version (v0.2.0+)",
+    )
+    type_: str | None = Field(
+        default=None,
+        alias="type",
+        description="Document type discriminator (v0.2.0+)",
     )
     meta: WordGrainMeta = Field(..., description="Document metadata")
     grains: tuple[WordGrainGrain, ...] = Field(
@@ -185,9 +203,20 @@ def _get_generator_string() -> str:
     return f"barscan/{ver}"
 
 
+def _version_fields(schema_version: str) -> dict[str, str]:
+    """Return version-specific fields for WordGrainDocument constructor."""
+    schema_url = WORDGRAIN_SCHEMA_URLS.get(schema_version, WORDGRAIN_SCHEMA_URL)
+    fields: dict[str, str] = {"$schema": schema_url}
+    if schema_version >= "0.2.0":
+        fields["schema_version"] = schema_version
+        fields["type"] = "word"
+    return fields
+
+
 def to_wordgrain(
     aggregate: AggregateAnalysisResult,
     language: str = "en",
+    schema_version: str = DEFAULT_WORDGRAIN_SCHEMA_VERSION,
 ) -> WordGrainDocument:
     """Convert analysis results to WordGrain format.
 
@@ -226,6 +255,7 @@ def to_wordgrain(
     )
 
     return WordGrainDocument(
+        **_version_fields(schema_version),
         meta=meta,
         grains=tuple(grains),
     )
@@ -257,6 +287,7 @@ def to_wordgrain_enhanced(
     word_counts_per_song: list[Counter[str]] | None = None,
     tokens_with_positions: list[TokenWithPosition] | None = None,
     language: str | None = None,
+    schema_version: str = DEFAULT_WORDGRAIN_SCHEMA_VERSION,
 ) -> WordGrainDocument:
     """Convert analysis results to WordGrain format with enhanced NLP fields.
 
@@ -374,6 +405,7 @@ def to_wordgrain_enhanced(
     )
 
     return WordGrainDocument(
+        **_version_fields(schema_version),
         meta=meta,
         grains=tuple(grains),
     )

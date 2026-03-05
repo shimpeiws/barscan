@@ -1,7 +1,9 @@
 """Output formatting module."""
 
 from barscan.output.wordgrain import (
+    DEFAULT_WORDGRAIN_SCHEMA_VERSION,
     WORDGRAIN_SCHEMA_URL,
+    WORDGRAIN_SCHEMA_URLS,
     WordGrainDocument,
     WordGrainGrain,
     WordGrainMeta,
@@ -14,7 +16,9 @@ from barscan.output.wordgrain import (
 )
 
 __all__ = [
+    "DEFAULT_WORDGRAIN_SCHEMA_VERSION",
     "WORDGRAIN_SCHEMA_URL",
+    "WORDGRAIN_SCHEMA_URLS",
     "WordGrainDocument",
     "WordGrainGrain",
     "WordGrainMeta",
