@@ -13,15 +13,22 @@ from barscan.output.wordgrain import (
     DEFAULT_WORDGRAIN_SCHEMA_VERSION,
     WORDGRAIN_SCHEMA_URL,
     WORDGRAIN_SCHEMA_URLS,
+    BarGrainDocument,
+    BarGrainEntry,
+    BarMetrics,
+    BarSemantics,
+    BarSource,
     WordGrainDocument,
     WordGrainGrain,
     WordGrainMeta,
     _get_generator_string,
+    _version_fields,
     export_wordgrain,
     generate_filename,
     resolve_wordgrain_language,
     slugify,
     to_wordgrain,
+    to_wordgrain_bar,
     to_wordgrain_enhanced,
 )
 
@@ -689,3 +696,285 @@ class TestToWordgrainEnhanced:
         assert doc.schema_ == WORDGRAIN_SCHEMA_URLS["0.1.0"]
         assert doc.schema_version is None
         assert doc.type_ is None
+
+
+class TestBarGrainModels:
+    """Tests for bar grain models."""
+
+    def test_bar_source_creation(self) -> None:
+        """Test creating a BarSource."""
+        source = BarSource(artist="Kendrick Lamar", track="HUMBLE.")
+        assert source.artist == "Kendrick Lamar"
+        assert source.track == "HUMBLE."
+        assert source.album is None
+        assert source.year is None
+        assert source.featuring is None
+
+    def test_bar_source_with_optional_fields(self) -> None:
+        """Test BarSource with all optional fields."""
+        source = BarSource(
+            artist="Kendrick Lamar",
+            track="HUMBLE.",
+            album="DAMN.",
+            year=2017,
+            featuring="feat. Someone",
+        )
+        assert source.album == "DAMN."
+        assert source.year == 2017
+
+    def test_bar_source_empty_artist_rejected(self) -> None:
+        """Test that empty artist is rejected."""
+        with pytest.raises(ValidationError):
+            BarSource(artist="", track="Test")
+
+    def test_bar_source_empty_track_rejected(self) -> None:
+        """Test that empty track is rejected."""
+        with pytest.raises(ValidationError):
+            BarSource(artist="Test", track="")
+
+    def test_bar_metrics_creation(self) -> None:
+        """Test creating BarMetrics."""
+        metrics = BarMetrics(lines=1)
+        assert metrics.lines == 1
+        assert metrics.syllables is None
+        assert metrics.mora is None
+
+    def test_bar_metrics_zero_lines_rejected(self) -> None:
+        """Test that zero lines is rejected."""
+        with pytest.raises(ValidationError):
+            BarMetrics(lines=0)
+
+    def test_bar_semantics_valid_mood(self) -> None:
+        """Test BarSemantics with valid mood."""
+        sem = BarSemantics(mood="aggressive")
+        assert sem.mood == "aggressive"
+
+    def test_bar_semantics_invalid_mood_rejected(self) -> None:
+        """Test BarSemantics with invalid mood."""
+        with pytest.raises(ValidationError):
+            BarSemantics(mood="happy")
+
+    def test_bar_semantics_none_mood(self) -> None:
+        """Test BarSemantics with no mood."""
+        sem = BarSemantics()
+        assert sem.mood is None
+
+    def test_bar_grain_entry_creation(self) -> None:
+        """Test creating a BarGrainEntry."""
+        entry = BarGrainEntry(
+            text="I got loyalty, got royalty inside my DNA",
+            source=BarSource(artist="Kendrick Lamar", track="DNA."),
+            metrics=BarMetrics(lines=1),
+            language="en",
+        )
+        assert entry.text == "I got loyalty, got royalty inside my DNA"
+        assert entry.source.artist == "Kendrick Lamar"
+        assert entry.metrics.lines == 1
+        assert entry.language == "en"
+
+    def test_bar_grain_entry_empty_text_rejected(self) -> None:
+        """Test that empty text is rejected."""
+        with pytest.raises(ValidationError):
+            BarGrainEntry(
+                text="",
+                source=BarSource(artist="Test", track="Test"),
+            )
+
+    def test_bar_grain_entry_is_frozen(self) -> None:
+        """Test that BarGrainEntry is immutable."""
+        entry = BarGrainEntry(
+            text="test line",
+            source=BarSource(artist="Test", track="Test"),
+        )
+        with pytest.raises(ValidationError):
+            entry.text = "new text"  # type: ignore[misc]
+
+
+class TestBarGrainDocument:
+    """Tests for BarGrainDocument model."""
+
+    def test_create_bar_document(self) -> None:
+        """Test creating a BarGrainDocument."""
+        meta = WordGrainMeta(
+            artist="Test Artist",
+            generated_at=datetime.now(UTC),
+            corpus_size=1,
+            total_words=2,
+            generator="barscan/0.3.0",
+        )
+        grains = (
+            BarGrainEntry(
+                text="line one",
+                source=BarSource(artist="Test Artist", track="Song 1"),
+                metrics=BarMetrics(lines=1),
+            ),
+            BarGrainEntry(
+                text="line two",
+                source=BarSource(artist="Test Artist", track="Song 1"),
+                metrics=BarMetrics(lines=1),
+            ),
+        )
+        doc = BarGrainDocument(
+            **{"$schema": WORDGRAIN_SCHEMA_URLS["0.2.0"]},
+            schema_version="0.2.0",
+            **{"type": "bar"},
+            meta=meta,
+            grains=grains,
+        )
+        assert doc.type_ == "bar"
+        assert doc.schema_version == "0.2.0"
+        assert len(doc.grains) == 2
+
+    def test_bar_document_serialization(self) -> None:
+        """Test BarGrainDocument serializes with correct type."""
+        meta = WordGrainMeta(
+            artist="Test",
+            generated_at=datetime.now(UTC),
+            corpus_size=1,
+            total_words=1,
+            generator="barscan/0.3.0",
+        )
+        doc = BarGrainDocument(
+            **{"$schema": WORDGRAIN_SCHEMA_URLS["0.2.0"]},
+            schema_version="0.2.0",
+            **{"type": "bar"},
+            meta=meta,
+            grains=(
+                BarGrainEntry(
+                    text="test line",
+                    source=BarSource(artist="Test", track="Song"),
+                    metrics=BarMetrics(lines=1),
+                ),
+            ),
+        )
+        json_str = doc.model_dump_json(by_alias=True, exclude_none=True)
+        data = json.loads(json_str)
+        assert data["type"] == "bar"
+        assert data["schema_version"] == "0.2.0"
+        assert data["grains"][0]["text"] == "test line"
+
+
+class TestVersionFields:
+    """Tests for _version_fields function."""
+
+    def test_version_fields_word_type(self) -> None:
+        """Test _version_fields with default word type."""
+        fields = _version_fields("0.2.0")
+        assert fields["type"] == "word"
+        assert fields["schema_version"] == "0.2.0"
+
+    def test_version_fields_bar_type(self) -> None:
+        """Test _version_fields with bar type."""
+        fields = _version_fields("0.2.0", "bar")
+        assert fields["type"] == "bar"
+        assert fields["schema_version"] == "0.2.0"
+
+    def test_version_fields_010_no_type(self) -> None:
+        """Test _version_fields for v0.1.0 has no type or schema_version."""
+        fields = _version_fields("0.1.0")
+        assert "type" not in fields
+        assert "schema_version" not in fields
+
+    def test_version_fields_010_bar_type_ignored(self) -> None:
+        """Test _version_fields for v0.1.0 ignores bar type."""
+        fields = _version_fields("0.1.0", "bar")
+        assert "type" not in fields
+
+
+class TestToWordgrainBar:
+    """Tests for to_wordgrain_bar function."""
+
+    def test_basic_conversion(self) -> None:
+        """Test basic conversion from lyrics to bar grains."""
+        lyrics_data = [
+            ("First line\nSecond line", 1, "Song One"),
+        ]
+        doc = to_wordgrain_bar(lyrics_data, artist_name="Test Artist")
+        assert len(doc.grains) == 2
+        assert doc.grains[0].text == "First line"
+        assert doc.grains[1].text == "Second line"
+        assert doc.grains[0].source.artist == "Test Artist"
+        assert doc.grains[0].source.track == "Song One"
+
+    def test_multiple_songs(self) -> None:
+        """Test conversion with multiple songs."""
+        lyrics_data = [
+            ("Line from song 1", 1, "Song One"),
+            ("Line from song 2", 2, "Song Two"),
+        ]
+        doc = to_wordgrain_bar(lyrics_data, artist_name="Test Artist")
+        assert len(doc.grains) == 2
+        assert doc.grains[0].source.track == "Song One"
+        assert doc.grains[1].source.track == "Song Two"
+        assert doc.meta.corpus_size == 2
+
+    def test_empty_lines_skipped(self) -> None:
+        """Test that empty lines are skipped."""
+        lyrics_data = [
+            ("Line one\n\nLine two\n  \nLine three", 1, "Song"),
+        ]
+        doc = to_wordgrain_bar(lyrics_data, artist_name="Test")
+        assert len(doc.grains) == 3
+
+    def test_metrics_lines_always_one(self) -> None:
+        """Test that each grain has metrics.lines = 1."""
+        lyrics_data = [("A line", 1, "Song")]
+        doc = to_wordgrain_bar(lyrics_data, artist_name="Test")
+        assert doc.grains[0].metrics is not None
+        assert doc.grains[0].metrics.lines == 1
+
+    def test_language_propagation(self) -> None:
+        """Test that language is propagated to grains and meta."""
+        lyrics_data = [("テスト", 1, "Song")]
+        doc = to_wordgrain_bar(lyrics_data, artist_name="Test", language="ja")
+        assert doc.meta.language == "ja"
+        assert doc.grains[0].language == "ja"
+
+    def test_total_words_is_line_count(self) -> None:
+        """Test that meta.total_words equals total line count for bar type."""
+        lyrics_data = [
+            ("Line 1\nLine 2\nLine 3", 1, "Song"),
+        ]
+        doc = to_wordgrain_bar(lyrics_data, artist_name="Test")
+        assert doc.meta.total_words == 3
+
+    def test_type_is_bar(self) -> None:
+        """Test that document type is 'bar'."""
+        lyrics_data = [("A line", 1, "Song")]
+        doc = to_wordgrain_bar(lyrics_data, artist_name="Test")
+        assert doc.type_ == "bar"
+        assert doc.schema_version == "0.2.0"
+
+    def test_schema_below_020_raises_error(self) -> None:
+        """Test that schema version below 0.2.0 raises ValueError."""
+        lyrics_data = [("A line", 1, "Song")]
+        with pytest.raises(ValueError, match="Bar type requires WordGrain schema >= 0.2.0"):
+            to_wordgrain_bar(lyrics_data, artist_name="Test", schema_version="0.1.0")
+
+    def test_chorus_repeats_kept(self) -> None:
+        """Test that repeated lines (chorus) are kept."""
+        lyrics_data = [
+            ("Chorus line\nVerse line\nChorus line", 1, "Song"),
+        ]
+        doc = to_wordgrain_bar(lyrics_data, artist_name="Test")
+        assert len(doc.grains) == 3
+        assert doc.grains[0].text == doc.grains[2].text
+
+
+class TestExportWordgrainBar:
+    """Tests for exporting bar documents."""
+
+    def test_export_bar_document(self) -> None:
+        """Test that bar document exports correctly."""
+        lyrics_data = [("Test line one\nTest line two", 1, "Song")]
+        doc = to_wordgrain_bar(lyrics_data, artist_name="Test Artist")
+        json_str = export_wordgrain(doc)
+        data = json.loads(json_str)
+        assert data["type"] == "bar"
+        assert data["schema_version"] == "0.2.0"
+        assert len(data["grains"]) == 2
+        assert data["grains"][0]["text"] == "Test line one"
+        assert data["grains"][0]["source"]["artist"] == "Test Artist"
+        assert data["grains"][0]["source"]["track"] == "Song"
+        assert data["grains"][0]["metrics"]["lines"] == 1
+        assert data["grains"][0]["language"] == "en"

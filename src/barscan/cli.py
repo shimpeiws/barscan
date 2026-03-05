@@ -42,6 +42,7 @@ from barscan.output import (
     generate_filename,
     resolve_wordgrain_language,
     to_wordgrain,
+    to_wordgrain_bar,
     to_wordgrain_enhanced,
 )
 
@@ -192,6 +193,13 @@ def analyze(
             help=f"WordGrain schema version ({', '.join(WORDGRAIN_SCHEMA_URLS)})",
         ),
     ] = DEFAULT_WORDGRAIN_SCHEMA_VERSION,
+    wordgrain_type: Annotated[
+        str,
+        typer.Option(
+            "--wordgrain-type",
+            help="WordGrain output type: word (frequency analysis) or bar (line-level lyrics)",
+        ),
+    ] = "word",
 ) -> None:
     """Analyze word frequency in an artist's lyrics."""
     setup_logging(verbose=verbose)
@@ -226,6 +234,21 @@ def analyze(
         )
         raise typer.Exit(1)
 
+    # Validate wordgrain type
+    valid_wordgrain_types = {"word", "bar"}
+    if wordgrain_type not in valid_wordgrain_types:
+        error_console.print(
+            f"[red]Error:[/red] Invalid WordGrain type '{wordgrain_type}'. "
+            "Valid options: word, bar"
+        )
+        raise typer.Exit(1)
+
+    if wordgrain_type == "bar" and wordgrain_schema < "0.2.0":
+        error_console.print(
+            "[red]Error:[/red] WordGrain bar type requires schema version >= 0.2.0"
+        )
+        raise typer.Exit(1)
+
     # Validate language
     valid_languages = {"english", "japanese", "auto"}
     if language not in valid_languages:
@@ -249,8 +272,9 @@ def analyze(
         language=language,
     )
 
-    # Track if we need enhanced data
+    # Track if we need enhanced data or bar type lyrics
     needs_enhanced = enhanced or detect_slang or contexts_mode_enum != ContextsMode.NONE
+    needs_lyrics_data = needs_enhanced or wordgrain_type == "bar"
 
     try:
         with Progress(
@@ -293,8 +317,8 @@ def analyze(
                             config=config,
                         )
                         results.append(result)
-                        # Store lyrics data for enhanced analysis
-                        if needs_enhanced:
+                        # Store lyrics data for enhanced analysis or bar type
+                        if needs_lyrics_data:
                             lyrics_data.append(
                                 (lyrics.lyrics_text, lyrics.song_id, lyrics.song_title)
                             )
@@ -334,6 +358,8 @@ def analyze(
             word_counts_per_song=word_counts_per_song,
             tokens_with_positions=tokens_with_positions,
             schema_version=wordgrain_schema,
+            wordgrain_type=wordgrain_type,
+            lyrics_data=lyrics_data,
         )
 
         if output_file:
@@ -378,6 +404,8 @@ def format_output(
     word_counts_per_song: list[Counter[str]] | None = None,
     tokens_with_positions: list[TokenWithPosition] | None = None,
     schema_version: str = DEFAULT_WORDGRAIN_SCHEMA_VERSION,
+    wordgrain_type: str = "word",
+    lyrics_data: list[tuple[str, int, str]] | None = None,
 ) -> str:
     """Format analysis results for output."""
     if output_format == OutputFormat.WORDGRAIN:
@@ -391,9 +419,18 @@ def format_output(
             else "en"
         )
 
+        if wordgrain_type == "bar":
+            bar_doc = to_wordgrain_bar(
+                lyrics_data=lyrics_data or [],
+                artist_name=artist_name,
+                language=wg_language,
+                schema_version=schema_version,
+            )
+            return export_wordgrain(bar_doc)
+
         # Use enhanced output if config is provided
         if config is not None:
-            document = to_wordgrain_enhanced(
+            word_doc = to_wordgrain_enhanced(
                 aggregate=aggregate,
                 config=config,
                 word_counts_per_song=word_counts_per_song,
@@ -402,8 +439,8 @@ def format_output(
                 schema_version=schema_version,
             )
         else:
-            document = to_wordgrain(aggregate, language=wg_language, schema_version=schema_version)
-        return export_wordgrain(document)
+            word_doc = to_wordgrain(aggregate, language=wg_language, schema_version=schema_version)
+        return export_wordgrain(word_doc)
 
     if output_format == OutputFormat.JSON:
         data = {
