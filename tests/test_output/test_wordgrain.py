@@ -10,7 +10,9 @@ from pydantic import ValidationError
 
 from barscan.analyzer.models import AggregateAnalysisResult, AnalysisConfig, WordFrequency
 from barscan.output.wordgrain import (
+    DEFAULT_WORDGRAIN_SCHEMA_VERSION,
     WORDGRAIN_SCHEMA_URL,
+    WORDGRAIN_SCHEMA_URLS,
     WordGrainDocument,
     WordGrainGrain,
     WordGrainMeta,
@@ -126,7 +128,7 @@ class TestWordGrainDocument:
         assert len(doc.grains) == 2
 
     def test_document_default_schema(self) -> None:
-        """Test default schema URL."""
+        """Test default schema URL points to v0.2.0."""
         doc = WordGrainDocument(
             meta=WordGrainMeta(
                 artist="Test",
@@ -137,7 +139,41 @@ class TestWordGrainDocument:
             ),
             grains=(),
         )
-        assert doc.schema_ == "https://raw.githubusercontent.com/shimpeiws/word-grain/main/schema/v0.1.0/wordgrain.schema.json"
+        assert doc.schema_ == WORDGRAIN_SCHEMA_URLS["0.2.0"]
+
+    def test_document_v020_fields(self) -> None:
+        """Test v0.2.0 fields (schema_version, type)."""
+        doc = WordGrainDocument(
+            **{"$schema": WORDGRAIN_SCHEMA_URLS["0.2.0"]},
+            schema_version="0.2.0",
+            **{"type": "word"},
+            meta=WordGrainMeta(
+                artist="Test",
+                generated_at=datetime.now(UTC),
+                corpus_size=1,
+                total_words=100,
+                generator="test/0.1.0",
+            ),
+            grains=(),
+        )
+        assert doc.schema_version == "0.2.0"
+        assert doc.type_ == "word"
+
+    def test_document_v010_no_extra_fields(self) -> None:
+        """Test v0.1.0 document has no schema_version or type."""
+        doc = WordGrainDocument(
+            **{"$schema": WORDGRAIN_SCHEMA_URLS["0.1.0"]},
+            meta=WordGrainMeta(
+                artist="Test",
+                generated_at=datetime.now(UTC),
+                corpus_size=1,
+                total_words=100,
+                generator="test/0.1.0",
+            ),
+            grains=(),
+        )
+        assert doc.schema_version is None
+        assert doc.type_ is None
 
     def test_schema_field_alias(self) -> None:
         """Test that $schema field is serialized correctly."""
@@ -284,6 +320,20 @@ class TestToWordgrain:
         doc = to_wordgrain(sample_aggregate, language="es")
         assert doc.meta.language == "es"
 
+    def test_default_schema_version(self, sample_aggregate: AggregateAnalysisResult) -> None:
+        """Test default schema version is 0.2.0 with schema_version and type fields."""
+        doc = to_wordgrain(sample_aggregate)
+        assert doc.schema_ == WORDGRAIN_SCHEMA_URLS["0.2.0"]
+        assert doc.schema_version == "0.2.0"
+        assert doc.type_ == "word"
+
+    def test_schema_version_010(self, sample_aggregate: AggregateAnalysisResult) -> None:
+        """Test schema version 0.1.0 has no schema_version or type fields."""
+        doc = to_wordgrain(sample_aggregate, schema_version="0.1.0")
+        assert doc.schema_ == WORDGRAIN_SCHEMA_URLS["0.1.0"]
+        assert doc.schema_version is None
+        assert doc.type_ is None
+
     def test_zero_total_words(self) -> None:
         """Test handling of zero total_words."""
         aggregate = AggregateAnalysisResult(
@@ -334,6 +384,44 @@ class TestExportWordgrain:
         data = json.loads(json_str)
         assert "$schema" in data
         assert data["$schema"] == WORDGRAIN_SCHEMA_URL
+
+    def test_export_v020_includes_schema_version_and_type(self) -> None:
+        """Test that v0.2.0 export includes schema_version and type."""
+        doc = WordGrainDocument(
+            **{"$schema": WORDGRAIN_SCHEMA_URLS["0.2.0"]},
+            schema_version="0.2.0",
+            **{"type": "word"},
+            meta=WordGrainMeta(
+                artist="Test",
+                generated_at=datetime.now(UTC),
+                corpus_size=1,
+                total_words=100,
+                generator="test/0.1.0",
+            ),
+            grains=(),
+        )
+        json_str = export_wordgrain(doc)
+        data = json.loads(json_str)
+        assert data["schema_version"] == "0.2.0"
+        assert data["type"] == "word"
+
+    def test_export_v010_excludes_schema_version_and_type(self) -> None:
+        """Test that v0.1.0 export excludes schema_version and type."""
+        doc = WordGrainDocument(
+            **{"$schema": WORDGRAIN_SCHEMA_URLS["0.1.0"]},
+            meta=WordGrainMeta(
+                artist="Test",
+                generated_at=datetime.now(UTC),
+                corpus_size=1,
+                total_words=100,
+                generator="test/0.1.0",
+            ),
+            grains=(),
+        )
+        json_str = export_wordgrain(doc)
+        data = json.loads(json_str)
+        assert "schema_version" not in data
+        assert "type" not in data
 
     def test_export_format_indentation(self) -> None:
         """Test JSON formatting with indentation."""
@@ -579,3 +667,25 @@ class TestToWordgrainEnhanced:
         assert doc.grains[0].frequency_normalized == 500.0
         # 30 / 1000 * 10000 = 300.0
         assert doc.grains[1].frequency_normalized == 300.0
+
+    def test_enhanced_default_schema_version(
+        self, sample_aggregate: AggregateAnalysisResult
+    ) -> None:
+        """Test default schema version is 0.2.0."""
+        config = AnalysisConfig()
+        doc = to_wordgrain_enhanced(aggregate=sample_aggregate, config=config)
+        assert doc.schema_ == WORDGRAIN_SCHEMA_URLS["0.2.0"]
+        assert doc.schema_version == "0.2.0"
+        assert doc.type_ == "word"
+
+    def test_enhanced_schema_version_010(
+        self, sample_aggregate: AggregateAnalysisResult
+    ) -> None:
+        """Test schema version 0.1.0 has no extra fields."""
+        config = AnalysisConfig()
+        doc = to_wordgrain_enhanced(
+            aggregate=sample_aggregate, config=config, schema_version="0.1.0"
+        )
+        assert doc.schema_ == WORDGRAIN_SCHEMA_URLS["0.1.0"]
+        assert doc.schema_version is None
+        assert doc.type_ is None

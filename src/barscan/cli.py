@@ -36,6 +36,8 @@ from barscan.exceptions import (
 from barscan.genius import GeniusClient, LyricsCache
 from barscan.logging import setup_logging
 from barscan.output import (
+    DEFAULT_WORDGRAIN_SCHEMA_VERSION,
+    WORDGRAIN_SCHEMA_URLS,
     export_wordgrain,
     generate_filename,
     resolve_wordgrain_language,
@@ -183,6 +185,13 @@ def analyze(
             help="Language for tokenization: english, japanese, or auto (default)",
         ),
     ] = "auto",
+    wordgrain_schema: Annotated[
+        str,
+        typer.Option(
+            "--wordgrain-schema",
+            help=f"WordGrain schema version ({', '.join(WORDGRAIN_SCHEMA_URLS)})",
+        ),
+    ] = DEFAULT_WORDGRAIN_SCHEMA_VERSION,
 ) -> None:
     """Analyze word frequency in an artist's lyrics."""
     setup_logging(verbose=verbose)
@@ -208,6 +217,14 @@ def analyze(
             "Valid options: none, short, full"
         )
         raise typer.Exit(1) from None
+
+    # Validate wordgrain schema version
+    if wordgrain_schema not in WORDGRAIN_SCHEMA_URLS:
+        error_console.print(
+            f"[red]Error:[/red] Invalid WordGrain schema version '{wordgrain_schema}'. "
+            f"Valid options: {', '.join(WORDGRAIN_SCHEMA_URLS)}"
+        )
+        raise typer.Exit(1)
 
     # Validate language
     valid_languages = {"english", "japanese", "auto"}
@@ -316,6 +333,7 @@ def analyze(
             config=config if needs_enhanced else None,
             word_counts_per_song=word_counts_per_song,
             tokens_with_positions=tokens_with_positions,
+            schema_version=wordgrain_schema,
         )
 
         if output_file:
@@ -359,6 +377,7 @@ def format_output(
     config: AnalysisConfig | None = None,
     word_counts_per_song: list[Counter[str]] | None = None,
     tokens_with_positions: list[TokenWithPosition] | None = None,
+    schema_version: str = DEFAULT_WORDGRAIN_SCHEMA_VERSION,
 ) -> str:
     """Format analysis results for output."""
     if output_format == OutputFormat.WORDGRAIN:
@@ -380,9 +399,10 @@ def format_output(
                 word_counts_per_song=word_counts_per_song,
                 tokens_with_positions=tokens_with_positions,
                 language=wg_language,
+                schema_version=schema_version,
             )
         else:
-            document = to_wordgrain(aggregate, language=wg_language)
+            document = to_wordgrain(aggregate, language=wg_language, schema_version=schema_version)
         return export_wordgrain(document)
 
     if output_format == OutputFormat.JSON:
