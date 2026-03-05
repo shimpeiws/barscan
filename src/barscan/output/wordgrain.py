@@ -103,10 +103,20 @@ class WordGrainGrain(BaseModel, frozen=True):
     )
 
 
-_VALID_MOODS = frozenset({
-    "aggressive", "melancholic", "triumphant", "reflective",
-    "humorous", "romantic", "defiant", "hopeful", "dark", "celebratory",
-})
+_VALID_MOODS = frozenset(
+    {
+        "aggressive",
+        "melancholic",
+        "triumphant",
+        "reflective",
+        "humorous",
+        "romantic",
+        "defiant",
+        "hopeful",
+        "dark",
+        "celebratory",
+    }
+)
 
 
 class BarSource(BaseModel, frozen=True):
@@ -199,9 +209,7 @@ class WordGrainDocument(BaseModel, frozen=True):
     grains: tuple[WordGrainGrain, ...] = Field(
         default_factory=tuple, description="List of word entries"
     )
-    bars: tuple[BarGrainEntry, ...] | None = Field(
-        default=None, description="List of bar entries"
-    )
+    bars: tuple[BarGrainEntry, ...] | None = Field(default=None, description="List of bar entries")
 
 
 def slugify(text: str) -> str:
@@ -480,9 +488,7 @@ def to_wordgrain_bar(
         ValueError: If schema_version < 0.2.0 (bars require v0.2.0+).
     """
     if schema_version < "0.2.0":
-        raise ValueError(
-            f"Bar type requires WordGrain schema >= 0.2.0, got '{schema_version}'"
-        )
+        raise ValueError(f"Bar type requires WordGrain schema >= 0.2.0, got '{schema_version}'")
 
     bars: list[BarGrainEntry] = []
     corpus_size = 0
