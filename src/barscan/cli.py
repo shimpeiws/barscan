@@ -45,6 +45,7 @@ from barscan.output import (
     to_wordgrain_bar,
     to_wordgrain_enhanced,
 )
+from barscan.output.wordgrain import SongLyricsData
 
 app = typer.Typer(
     name="barscan",
@@ -279,7 +280,7 @@ def analyze(
                 total=len(artist_data.songs),
             )
             results = []
-            lyrics_data: list[tuple[str, int, str]] = []  # For context extraction
+            lyrics_data: list[SongLyricsData] = []
             skipped = 0
 
             for song in artist_data.songs:
@@ -298,7 +299,12 @@ def analyze(
                         # Store lyrics data for enhanced analysis or bar type
                         if needs_lyrics_data:
                             lyrics_data.append(
-                                (lyrics.lyrics_text, lyrics.song_id, lyrics.song_title)
+                                SongLyricsData(
+                                    lyrics_text=lyrics.lyrics_text,
+                                    song_id=lyrics.song_id,
+                                    song_title=lyrics.song_title,
+                                    title_with_featured=song.title_with_featured,
+                                )
                             )
                 except NoLyricsFoundError:
                     skipped += 1
@@ -321,7 +327,10 @@ def analyze(
         if needs_enhanced and output_format == OutputFormat.WORDGRAIN:
             word_counts_per_song = get_word_counts_per_song(results)
             if contexts_mode_enum != ContextsMode.NONE:
-                tokens_with_positions = collect_tokens_with_positions(lyrics_data, config)
+                tokens_with_positions = collect_tokens_with_positions(
+                    [(d.lyrics_text, d.song_id, d.song_title) for d in lyrics_data],
+                    config,
+                )
 
         # Output results
         if output_format == OutputFormat.WORDGRAIN:
@@ -376,7 +385,7 @@ def _output_wordgrain(
     word_counts_per_song: list[Counter[str]] | None,
     tokens_with_positions: list[TokenWithPosition] | None,
     schema_version: str,
-    lyrics_data: list[tuple[str, int, str]],
+    lyrics_data: list[SongLyricsData],
     output_file: Path | None,
 ) -> None:
     """Generate and output a unified WordGrain document with grains and bars."""
@@ -407,6 +416,7 @@ def _output_wordgrain(
             artist_name=aggregate.artist_name,
             language=wg_language,
             schema_version=schema_version,
+            config=config,
         )
         # Create unified document with both grains and bars
         from barscan.output.wordgrain import WordGrainDocument

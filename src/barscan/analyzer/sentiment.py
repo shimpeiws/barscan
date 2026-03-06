@@ -173,6 +173,40 @@ def analyze_word_sentiment(word: str, language: str = "english") -> tuple[str, f
     return analyze_sentiment(word, language=language)
 
 
+def map_sentiment_to_mood(compound: float, text: str) -> str:
+    """Map a VADER compound score and text to a mood enum value.
+
+    Args:
+        compound: VADER compound score (-1.0 to 1.0).
+        text: Original text for keyword-based overrides.
+
+    Returns:
+        Mood string matching the WordGrain schema enum.
+    """
+    text_lower = text.lower()
+
+    if compound >= 0.5:
+        if any(kw in text_lower for kw in ("love", "heart")):
+            return "romantic"
+        if any(kw in text_lower for kw in ("win", "king")):
+            return "triumphant"
+        return "celebratory"
+    elif compound >= 0.05:
+        if any(kw in text_lower for kw in ("laugh", "funny")):
+            return "humorous"
+        return "hopeful"
+    elif compound >= -0.05:
+        return "reflective"
+    elif compound >= -0.5:
+        if any(kw in text_lower for kw in ("fight", "battle")):
+            return "defiant"
+        return "melancholic"
+    else:
+        if any(kw in text_lower for kw in ("kill", "gun", "destroy")):
+            return "aggressive"
+        return "dark"
+
+
 def get_sentiment_scores(
     words: list[str], language: str = "english"
 ) -> dict[str, tuple[str, float]]:

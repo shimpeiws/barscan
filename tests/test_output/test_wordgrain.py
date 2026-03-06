@@ -17,6 +17,7 @@ from barscan.output.wordgrain import (
     BarMetrics,
     BarSemantics,
     BarSource,
+    SongLyricsData,
     WordGrainDocument,
     WordGrainGrain,
     WordGrainMeta,
@@ -24,6 +25,7 @@ from barscan.output.wordgrain import (
     _version_fields,
     export_wordgrain,
     generate_filename,
+    parse_featuring,
     resolve_wordgrain_language,
     slugify,
     to_wordgrain,
@@ -965,6 +967,139 @@ class TestToWordgrainBar:
         # BarSource should not have artist field
         source_data = doc.bars[0].source.model_dump()
         assert "artist" not in source_data
+
+
+class TestSongLyricsData:
+    """Tests for SongLyricsData NamedTuple."""
+
+    def test_create_basic(self) -> None:
+        """Test creating with required fields."""
+        data = SongLyricsData("lyrics", 1, "Song")
+        assert data.lyrics_text == "lyrics"
+        assert data.song_id == 1
+        assert data.song_title == "Song"
+        assert data.title_with_featured == ""
+
+    def test_create_with_featured(self) -> None:
+        """Test creating with title_with_featured."""
+        data = SongLyricsData("lyrics", 1, "Song", "Song (ft. Guest)")
+        assert data.title_with_featured == "Song (ft. Guest)"
+
+    def test_tuple_unpacking(self) -> None:
+        """Test backward-compatible tuple unpacking."""
+        data = SongLyricsData("lyrics", 1, "Song")
+        text, sid, title, twf = data
+        assert text == "lyrics"
+        assert sid == 1
+        assert title == "Song"
+        assert twf == ""
+
+
+class TestParseFeaturing:
+    """Tests for parse_featuring function."""
+
+    def test_ft_single_artist(self) -> None:
+        result = parse_featuring("Song (ft. Guest)", "Song")
+        assert result == ("Guest",)
+
+    def test_feat_single_artist(self) -> None:
+        result = parse_featuring("Song (feat. Guest)", "Song")
+        assert result == ("Guest",)
+
+    def test_ft_multiple_ampersand(self) -> None:
+        result = parse_featuring("Song (ft. A & B)", "Song")
+        assert result == ("A", "B")
+
+    def test_feat_multiple_comma_and_ampersand(self) -> None:
+        result = parse_featuring("Song (Ft. A, B & C)", "Song")
+        assert result == ("A", "B", "C")
+
+    def test_no_featuring(self) -> None:
+        result = parse_featuring("Song", "Song")
+        assert result is None
+
+    def test_case_insensitive(self) -> None:
+        result = parse_featuring("Song (FEAT. Guest)", "Song")
+        assert result == ("Guest",)
+
+
+class TestToWordgrainBarEnriched:
+    """Tests for enriched bar output with config."""
+
+    def test_word_count(self) -> None:
+        """Test that word_count is computed when config is provided."""
+        config = AnalysisConfig()
+        lyrics_data = [SongLyricsData("hello world foo bar", 1, "Song")]
+        doc = to_wordgrain_bar(lyrics_data, artist_name="Test", config=config)
+        assert doc.bars is not None
+        assert doc.bars[0].metrics is not None
+        assert doc.bars[0].metrics.word_count == 4
+
+    def test_syllable_count_english(self) -> None:
+        """Test that syllable_count is computed for English."""
+        config = AnalysisConfig()
+        lyrics_data = [SongLyricsData("hello world", 1, "Song")]
+        doc = to_wordgrain_bar(lyrics_data, artist_name="Test", config=config)
+        assert doc.bars is not None
+        assert doc.bars[0].metrics is not None
+        assert doc.bars[0].metrics.syllable_count is not None
+        assert doc.bars[0].metrics.syllable_count >= 2
+
+    def test_syllable_count_japanese_is_none(self) -> None:
+        """Test that syllable_count is None for Japanese."""
+        config = AnalysisConfig()
+        lyrics_data = [SongLyricsData("テスト", 1, "Song")]
+        doc = to_wordgrain_bar(
+            lyrics_data, artist_name="Test", language="ja", config=config
+        )
+        assert doc.bars is not None
+        assert doc.bars[0].metrics is not None
+        assert doc.bars[0].metrics.syllable_count is None
+
+    def test_mood_present(self) -> None:
+        """Test that mood is computed when config is provided."""
+        config = AnalysisConfig()
+        lyrics_data = [SongLyricsData("I love you so much", 1, "Song")]
+        doc = to_wordgrain_bar(lyrics_data, artist_name="Test", config=config)
+        assert doc.bars is not None
+        assert doc.bars[0].semantics is not None
+        assert doc.bars[0].semantics.mood is not None
+
+    def test_techniques_detected(self) -> None:
+        """Test that techniques are detected when present."""
+        config = AnalysisConfig()
+        lyrics_data = [SongLyricsData("big bad boy broke barriers", 1, "Song")]
+        doc = to_wordgrain_bar(lyrics_data, artist_name="Test", config=config)
+        assert doc.bars is not None
+        assert doc.bars[0].semantics is not None
+        assert doc.bars[0].semantics.techniques is not None
+        assert "alliteration" in doc.bars[0].semantics.techniques
+
+    def test_featuring_parsed(self) -> None:
+        """Test that featuring artists are parsed from title_with_featured."""
+        config = AnalysisConfig()
+        lyrics_data = [
+            SongLyricsData("test line", 1, "Song", "Song (ft. Guest)")
+        ]
+        doc = to_wordgrain_bar(lyrics_data, artist_name="Test", config=config)
+        assert doc.bars is not None
+        assert doc.bars[0].source.featuring == ("Guest",)
+
+    def test_no_enrichment_without_config(self) -> None:
+        """Test that no enrichment happens when config is None."""
+        lyrics_data = [SongLyricsData("hello world", 1, "Song")]
+        doc = to_wordgrain_bar(lyrics_data, artist_name="Test")
+        assert doc.bars is not None
+        assert doc.bars[0].metrics is None
+        assert doc.bars[0].semantics is None
+
+    def test_backward_compatible_tuple_input(self) -> None:
+        """Test that plain tuple input still works."""
+        lyrics_data = [("hello world", 1, "Song")]
+        doc = to_wordgrain_bar(lyrics_data, artist_name="Test")
+        assert doc.bars is not None
+        assert len(doc.bars) == 1
+        assert doc.bars[0].text == "hello world"
 
 
 class TestExportWordgrainBar:

@@ -26,6 +26,7 @@ class NLTKResource(Enum):
     WORDNET = ("corpora/wordnet", "wordnet")
     POS_TAGGER = ("taggers/averaged_perceptron_tagger_eng", "averaged_perceptron_tagger_eng")
     VADER_LEXICON = ("sentiment/vader_lexicon.zip", "vader_lexicon")
+    CMUDICT = ("corpora/cmudict", "cmudict")
 
 
 # Resource groups for different analysis modules
@@ -38,6 +39,8 @@ PROCESSOR_RESOURCES: Final[tuple[NLTKResource, ...]] = (
 POS_RESOURCES: Final[tuple[NLTKResource, ...]] = (NLTKResource.POS_TAGGER,)
 
 SENTIMENT_RESOURCES: Final[tuple[NLTKResource, ...]] = (NLTKResource.VADER_LEXICON,)
+
+SYLLABLE_RESOURCES: Final[tuple[NLTKResource, ...]] = (NLTKResource.CMUDICT,)
 
 
 def ensure_resource(resource: NLTKResource) -> None:

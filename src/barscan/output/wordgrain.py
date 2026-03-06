@@ -14,6 +14,7 @@ import unicodedata
 from collections import Counter
 from datetime import datetime
 from importlib.metadata import version
+from typing import NamedTuple
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -27,10 +28,54 @@ from barscan.analyzer.models import (
 )
 from barscan.analyzer.pos import get_pos_tags
 from barscan.analyzer.processor import clean_lyrics_preserve_lines
-from barscan.analyzer.sentiment import get_sentiment_scores
+from barscan.analyzer.sentiment import (
+    analyze_sentiment,
+    get_sentiment_scores,
+    map_sentiment_to_mood,
+)
 from barscan.analyzer.slang import detect_slang_words
+from barscan.analyzer.syllable import count_line_syllables
+from barscan.analyzer.techniques import detect_techniques
 from barscan.analyzer.tfidf import calculate_corpus_tfidf
 from barscan.analyzer.tokenizer import detect_language
+
+
+class SongLyricsData(NamedTuple):
+    """Data about a song's lyrics for bar generation."""
+
+    lyrics_text: str
+    song_id: int
+    song_title: str
+    title_with_featured: str = ""
+
+
+# Pattern to extract featured artists from title_with_featured
+_FEATURING_PATTERN = re.compile(
+    r"\(\s*(?:ft\.?|feat\.?|Ft\.?|Feat\.?)\s+(.+?)\s*\)",
+    re.IGNORECASE,
+)
+
+
+def parse_featuring(title_with_featured: str, song_title: str) -> tuple[str, ...] | None:
+    """Extract featured artist names from title_with_featured.
+
+    Args:
+        title_with_featured: Full title including featured artists.
+        song_title: Base song title without features.
+
+    Returns:
+        Tuple of featured artist names, or None if no features found.
+    """
+    match = _FEATURING_PATTERN.search(title_with_featured)
+    if not match:
+        return None
+
+    artists_str = match.group(1)
+    # Split on '&', ',' and strip whitespace
+    artists = re.split(r"\s*[,&]\s*", artists_str)
+    artists = [a.strip() for a in artists if a.strip()]
+    return tuple(artists) if artists else None
+
 
 WORDGRAIN_SCHEMA_URLS: dict[str, str] = {
     "0.1.0": "https://raw.githubusercontent.com/shimpeiws/word-grain/main/schema/v0.1.0/wordgrain.schema.json",
@@ -468,18 +513,20 @@ def to_wordgrain_enhanced(
 
 
 def to_wordgrain_bar(
-    lyrics_data: list[tuple[str, int, str]],
+    lyrics_data: list[SongLyricsData] | list[tuple[str, int, str]],
     artist_name: str,
     language: str = "en",
     schema_version: str = DEFAULT_WORDGRAIN_SCHEMA_VERSION,
+    config: AnalysisConfig | None = None,
 ) -> WordGrainDocument:
     """Convert lyrics data to WordGrain bar format (line-level).
 
     Args:
-        lyrics_data: List of (lyrics_text, song_id, song_title) tuples.
+        lyrics_data: List of SongLyricsData or (lyrics_text, song_id, song_title) tuples.
         artist_name: Primary artist name.
         language: ISO 639-1 language code.
         schema_version: WordGrain schema version (must be >= 0.2.0).
+        config: When provided, compute enrichment fields (metrics, semantics, source.featuring).
 
     Returns:
         WordGrainDocument with bars field containing one entry per lyric line.
@@ -493,17 +540,54 @@ def to_wordgrain_bar(
     bars: list[BarGrainEntry] = []
     corpus_size = 0
 
-    for lyrics_text, _song_id, song_title in lyrics_data:
+    for item in lyrics_data:
+        if isinstance(item, SongLyricsData):
+            lyrics_text = item.lyrics_text
+            song_title = item.song_title
+            title_with_featured = item.title_with_featured
+        else:
+            lyrics_text, _, song_title = item
+            title_with_featured = ""
+
         lines = clean_lyrics_preserve_lines(lyrics_text)
         corpus_size += 1
+
+        # Pre-compute per-song fields
+        featuring = (
+            parse_featuring(title_with_featured, song_title)
+            if config is not None and title_with_featured
+            else None
+        )
+
         for line in lines:
             stripped = line.strip()
             if not stripped:
                 continue
+
+            source = BarSource(track=song_title, featuring=featuring)
+            metrics: BarMetrics | None = None
+            semantics: BarSemantics | None = None
+
+            if config is not None:
+                # Word count
+                word_count = len(stripped.split())
+                # Syllable count
+                syllable_count = count_line_syllables(stripped, language)
+                metrics = BarMetrics(word_count=word_count, syllable_count=syllable_count)
+
+                # Mood from sentiment
+                _category, compound = analyze_sentiment(stripped)
+                mood = map_sentiment_to_mood(compound, stripped)
+                # Techniques
+                techniques = detect_techniques(stripped, language)
+                semantics = BarSemantics(mood=mood, techniques=techniques)
+
             bars.append(
                 BarGrainEntry(
                     text=stripped,
-                    source=BarSource(track=song_title),
+                    source=source,
+                    metrics=metrics,
+                    semantics=semantics,
                     language=language,
                 )
             )

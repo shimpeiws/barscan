@@ -10,6 +10,7 @@ from barscan.analyzer.sentiment import (
     analyze_sentiment,
     analyze_word_sentiment,
     get_sentiment_scores,
+    map_sentiment_to_mood,
 )
 from barscan.exceptions import NLTKResourceError
 
@@ -122,6 +123,52 @@ class TestGetSentimentScores:
         category, score = value
         assert category in ("positive", "negative", "neutral")
         assert isinstance(score, float)
+
+
+class TestMapSentimentToMood:
+    """Tests for map_sentiment_to_mood function."""
+
+    def test_highly_positive_celebratory(self) -> None:
+        assert map_sentiment_to_mood(0.7, "we did it yeah") == "celebratory"
+
+    def test_highly_positive_romantic(self) -> None:
+        assert map_sentiment_to_mood(0.7, "I love you with all my heart") == "romantic"
+
+    def test_highly_positive_triumphant(self) -> None:
+        assert map_sentiment_to_mood(0.6, "we win like a king") == "triumphant"
+
+    def test_positive_hopeful(self) -> None:
+        assert map_sentiment_to_mood(0.3, "things will get better") == "hopeful"
+
+    def test_positive_humorous(self) -> None:
+        assert map_sentiment_to_mood(0.2, "that was so funny I had to laugh") == "humorous"
+
+    def test_neutral_reflective(self) -> None:
+        assert map_sentiment_to_mood(0.0, "looking at the sky") == "reflective"
+
+    def test_negative_melancholic(self) -> None:
+        assert map_sentiment_to_mood(-0.3, "feeling so sad and alone") == "melancholic"
+
+    def test_negative_defiant(self) -> None:
+        assert map_sentiment_to_mood(-0.3, "ready to fight this battle") == "defiant"
+
+    def test_very_negative_dark(self) -> None:
+        assert map_sentiment_to_mood(-0.7, "everything is falling apart") == "dark"
+
+    def test_very_negative_aggressive(self) -> None:
+        assert map_sentiment_to_mood(-0.7, "gonna kill them with my gun") == "aggressive"
+
+    def test_boundary_positive(self) -> None:
+        assert map_sentiment_to_mood(0.05, "neutral text") == "hopeful"
+
+    def test_boundary_negative(self) -> None:
+        assert map_sentiment_to_mood(-0.05, "neutral text") == "reflective"
+
+    def test_boundary_very_negative(self) -> None:
+        assert map_sentiment_to_mood(-0.5, "sad words") == "melancholic"
+
+    def test_boundary_very_positive(self) -> None:
+        assert map_sentiment_to_mood(0.5, "happy day") == "celebratory"
 
 
 _has_oseti = find_spec("oseti") is not None
