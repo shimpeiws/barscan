@@ -4,6 +4,11 @@ from barscan.output.wordgrain import (
     DEFAULT_WORDGRAIN_SCHEMA_VERSION,
     WORDGRAIN_SCHEMA_URL,
     WORDGRAIN_SCHEMA_URLS,
+    BarGrainEntry,
+    BarMetrics,
+    BarSemantics,
+    BarSource,
+    SongLyricsData,
     WordGrainDocument,
     WordGrainGrain,
     WordGrainMeta,
@@ -12,6 +17,7 @@ from barscan.output.wordgrain import (
     resolve_wordgrain_language,
     slugify,
     to_wordgrain,
+    to_wordgrain_bar,
     to_wordgrain_enhanced,
 )
 
@@ -19,6 +25,11 @@ __all__ = [
     "DEFAULT_WORDGRAIN_SCHEMA_VERSION",
     "WORDGRAIN_SCHEMA_URL",
     "WORDGRAIN_SCHEMA_URLS",
+    "BarGrainEntry",
+    "BarMetrics",
+    "BarSemantics",
+    "BarSource",
+    "SongLyricsData",
     "WordGrainDocument",
     "WordGrainGrain",
     "WordGrainMeta",
@@ -27,5 +38,6 @@ __all__ = [
     "resolve_wordgrain_language",
     "slugify",
     "to_wordgrain",
+    "to_wordgrain_bar",
     "to_wordgrain_enhanced",
 ]

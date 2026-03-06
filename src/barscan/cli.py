@@ -42,8 +42,10 @@ from barscan.output import (
     generate_filename,
     resolve_wordgrain_language,
     to_wordgrain,
+    to_wordgrain_bar,
     to_wordgrain_enhanced,
 )
+from barscan.output.wordgrain import SongLyricsData
 
 app = typer.Typer(
     name="barscan",
@@ -249,8 +251,9 @@ def analyze(
         language=language,
     )
 
-    # Track if we need enhanced data
+    # Track if we need enhanced data or lyrics for bar output
     needs_enhanced = enhanced or detect_slang or contexts_mode_enum != ContextsMode.NONE
+    needs_lyrics_data = needs_enhanced or output_format == OutputFormat.WORDGRAIN
 
     try:
         with Progress(
@@ -277,7 +280,7 @@ def analyze(
                 total=len(artist_data.songs),
             )
             results = []
-            lyrics_data: list[tuple[str, int, str]] = []  # For context extraction
+            lyrics_data: list[SongLyricsData] = []
             skipped = 0
 
             for song in artist_data.songs:
@@ -293,10 +296,15 @@ def analyze(
                             config=config,
                         )
                         results.append(result)
-                        # Store lyrics data for enhanced analysis
-                        if needs_enhanced:
+                        # Store lyrics data for enhanced analysis or bar type
+                        if needs_lyrics_data:
                             lyrics_data.append(
-                                (lyrics.lyrics_text, lyrics.song_id, lyrics.song_title)
+                                SongLyricsData(
+                                    lyrics_text=lyrics.lyrics_text,
+                                    song_id=lyrics.song_id,
+                                    song_title=lyrics.song_title,
+                                    title_with_featured=song.title_with_featured,
+                                )
                             )
                 except NoLyricsFoundError:
                     skipped += 1
@@ -319,28 +327,37 @@ def analyze(
         if needs_enhanced and output_format == OutputFormat.WORDGRAIN:
             word_counts_per_song = get_word_counts_per_song(results)
             if contexts_mode_enum != ContextsMode.NONE:
-                tokens_with_positions = collect_tokens_with_positions(lyrics_data, config)
+                tokens_with_positions = collect_tokens_with_positions(
+                    [(d.lyrics_text, d.song_id, d.song_title) for d in lyrics_data],
+                    config,
+                )
 
         # Output results
-        output_content = format_output(
-            artist_name=aggregate.artist_name,
-            songs_analyzed=aggregate.songs_analyzed,
-            total_words=aggregate.total_words,
-            unique_words=aggregate.unique_words,
-            frequencies=list(top_frequencies),
-            output_format=output_format,
-            aggregate=aggregate,
-            config=config if needs_enhanced else None,
-            word_counts_per_song=word_counts_per_song,
-            tokens_with_positions=tokens_with_positions,
-            schema_version=wordgrain_schema,
-        )
-
-        if output_file:
-            output_file.write_text(output_content, encoding="utf-8")
-            console.print(f"Results written to [bold]{output_file}[/bold]")
+        if output_format == OutputFormat.WORDGRAIN:
+            _output_wordgrain(
+                aggregate=aggregate,
+                config=config if needs_enhanced else None,
+                word_counts_per_song=word_counts_per_song,
+                tokens_with_positions=tokens_with_positions,
+                schema_version=wordgrain_schema,
+                lyrics_data=lyrics_data,
+                output_file=output_file,
+            )
         else:
-            if output_format == OutputFormat.TABLE:
+            output_content = format_output(
+                artist_name=aggregate.artist_name,
+                songs_analyzed=aggregate.songs_analyzed,
+                total_words=aggregate.total_words,
+                unique_words=aggregate.unique_words,
+                frequencies=list(top_frequencies),
+                output_format=output_format,
+                aggregate=aggregate,
+            )
+
+            if output_file:
+                output_file.write_text(output_content, encoding="utf-8")
+                console.print(f"Results written to [bold]{output_file}[/bold]")
+            elif output_format == OutputFormat.TABLE:
                 display_table(
                     artist_name=aggregate.artist_name,
                     songs_analyzed=aggregate.songs_analyzed,
@@ -348,10 +365,6 @@ def analyze(
                     unique_words=aggregate.unique_words,
                     frequencies=list(top_frequencies),
                 )
-            elif output_format == OutputFormat.WORDGRAIN:
-                suggested_filename = generate_filename(aggregate.artist_name)
-                console.print(f"[dim]Suggested filename: {suggested_filename}[/dim]")
-                console.print(output_content)
             else:
                 console.print(output_content)
 
@@ -366,6 +379,67 @@ def analyze(
         raise typer.Exit(1) from None
 
 
+def _output_wordgrain(
+    aggregate: AggregateAnalysisResult,
+    config: AnalysisConfig | None,
+    word_counts_per_song: list[Counter[str]] | None,
+    tokens_with_positions: list[TokenWithPosition] | None,
+    schema_version: str,
+    lyrics_data: list[SongLyricsData],
+    output_file: Path | None,
+) -> None:
+    """Generate and output a unified WordGrain document with grains and bars."""
+    # Resolve language
+    wg_language = (
+        resolve_wordgrain_language(config.language, [f.word for f in aggregate.frequencies])
+        if config is not None
+        else "en"
+    )
+
+    # Generate word document (contains grains)
+    if config is not None:
+        doc = to_wordgrain_enhanced(
+            aggregate=aggregate,
+            config=config,
+            word_counts_per_song=word_counts_per_song,
+            tokens_with_positions=tokens_with_positions,
+            language=wg_language,
+            schema_version=schema_version,
+        )
+    else:
+        doc = to_wordgrain(aggregate, language=wg_language, schema_version=schema_version)
+
+    # Merge bar entries into unified document (only for schema >= 0.2.0)
+    if schema_version >= "0.2.0":
+        bar_doc = to_wordgrain_bar(
+            lyrics_data=lyrics_data,
+            artist_name=aggregate.artist_name,
+            language=wg_language,
+            schema_version=schema_version,
+            config=config,
+        )
+        # Create unified document with both grains and bars
+        from barscan.output.wordgrain import WordGrainDocument
+
+        doc = WordGrainDocument(
+            **{"$schema": doc.schema_},
+            schema_version=doc.schema_version,
+            meta=doc.meta,
+            grains=doc.grains,
+            bars=bar_doc.bars,
+        )
+
+    json_str = export_wordgrain(doc)
+
+    if output_file:
+        output_file.write_text(json_str, encoding="utf-8")
+        console.print(f"Results written to [bold]{output_file}[/bold]")
+    else:
+        suggested = generate_filename(aggregate.artist_name)
+        console.print(f"[dim]Suggested filename: {suggested}[/dim]")
+        console.print(json_str)
+
+
 def format_output(
     artist_name: str,
     songs_analyzed: int,
@@ -374,37 +448,8 @@ def format_output(
     frequencies: list[WordFrequency],
     output_format: OutputFormat,
     aggregate: AggregateAnalysisResult | None = None,
-    config: AnalysisConfig | None = None,
-    word_counts_per_song: list[Counter[str]] | None = None,
-    tokens_with_positions: list[TokenWithPosition] | None = None,
-    schema_version: str = DEFAULT_WORDGRAIN_SCHEMA_VERSION,
 ) -> str:
     """Format analysis results for output."""
-    if output_format == OutputFormat.WORDGRAIN:
-        if aggregate is None:
-            raise ValueError("aggregate is required for WORDGRAIN format")
-
-        # Resolve language for WordGrain output
-        wg_language = (
-            resolve_wordgrain_language(config.language, [f.word for f in aggregate.frequencies])
-            if config is not None
-            else "en"
-        )
-
-        # Use enhanced output if config is provided
-        if config is not None:
-            document = to_wordgrain_enhanced(
-                aggregate=aggregate,
-                config=config,
-                word_counts_per_song=word_counts_per_song,
-                tokens_with_positions=tokens_with_positions,
-                language=wg_language,
-                schema_version=schema_version,
-            )
-        else:
-            document = to_wordgrain(aggregate, language=wg_language, schema_version=schema_version)
-        return export_wordgrain(document)
-
     if output_format == OutputFormat.JSON:
         data = {
             "artist": artist_name,
