@@ -6,6 +6,16 @@ from datetime import UTC, datetime
 from unittest.mock import patch
 
 import pytest
+
+_janome_available = True
+try:
+    from janome.tokenizer import Tokenizer as _JanomeTokenizer
+except ImportError:
+    _janome_available = False
+
+skip_without_janome = pytest.mark.skipif(
+    not _janome_available, reason="janome is not installed"
+)
 from pydantic import ValidationError
 
 from barscan.analyzer.models import AggregateAnalysisResult, AnalysisConfig, WordFrequency
@@ -1035,6 +1045,7 @@ class TestToWordgrainBarEnriched:
         assert doc.bars[0].metrics is not None
         assert doc.bars[0].metrics.word_count == 4
 
+    @skip_without_janome
     def test_word_count_japanese(self) -> None:
         """Test that word_count uses tokenizer for Japanese (not whitespace split)."""
         config = AnalysisConfig(language="japanese")
@@ -1057,6 +1068,7 @@ class TestToWordgrainBarEnriched:
         assert doc.bars[0].metrics.syllable_count is not None
         assert doc.bars[0].metrics.syllable_count >= 2
 
+    @skip_without_janome
     def test_syllable_count_japanese_is_mora(self) -> None:
         """Test that syllable_count returns mora count for Japanese."""
         config = AnalysisConfig()
