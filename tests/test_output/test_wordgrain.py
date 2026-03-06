@@ -1057,8 +1057,8 @@ class TestToWordgrainBarEnriched:
         assert doc.bars[0].metrics.syllable_count is not None
         assert doc.bars[0].metrics.syllable_count >= 2
 
-    def test_syllable_count_japanese_is_none(self) -> None:
-        """Test that syllable_count is None for Japanese."""
+    def test_syllable_count_japanese_is_mora(self) -> None:
+        """Test that syllable_count returns mora count for Japanese."""
         config = AnalysisConfig()
         lyrics_data = [SongLyricsData("テスト", 1, "Song")]
         doc = to_wordgrain_bar(
@@ -1066,7 +1066,8 @@ class TestToWordgrainBarEnriched:
         )
         assert doc.bars is not None
         assert doc.bars[0].metrics is not None
-        assert doc.bars[0].metrics.syllable_count is None
+        # テスト = テ(1) + ス(1) + ト(1) = 3 morae
+        assert doc.bars[0].metrics.syllable_count == 3
 
     def test_mood_present(self) -> None:
         """Test that mood is computed when config is provided."""
