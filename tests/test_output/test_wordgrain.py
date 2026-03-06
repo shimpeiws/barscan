@@ -1026,14 +1026,26 @@ class TestParseFeaturing:
 class TestToWordgrainBarEnriched:
     """Tests for enriched bar output with config."""
 
-    def test_word_count(self) -> None:
-        """Test that word_count is computed when config is provided."""
+    def test_word_count_english(self) -> None:
+        """Test that word_count is computed for English."""
         config = AnalysisConfig()
         lyrics_data = [SongLyricsData("hello world foo bar", 1, "Song")]
         doc = to_wordgrain_bar(lyrics_data, artist_name="Test", config=config)
         assert doc.bars is not None
         assert doc.bars[0].metrics is not None
         assert doc.bars[0].metrics.word_count == 4
+
+    def test_word_count_japanese(self) -> None:
+        """Test that word_count uses tokenizer for Japanese (not whitespace split)."""
+        config = AnalysisConfig(language="japanese")
+        lyrics_data = [SongLyricsData("君は俺の過去より今を", 1, "Song")]
+        doc = to_wordgrain_bar(
+            lyrics_data, artist_name="Test", language="ja", config=config
+        )
+        assert doc.bars is not None
+        assert doc.bars[0].metrics is not None
+        # 君/は/俺/の/過去/より/今/を = 8 tokens (POS filtering disabled for word count)
+        assert doc.bars[0].metrics.word_count == 8
 
     def test_syllable_count_english(self) -> None:
         """Test that syllable_count is computed for English."""

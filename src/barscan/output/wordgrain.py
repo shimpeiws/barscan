@@ -27,7 +27,7 @@ from barscan.analyzer.models import (
     WordContext,
 )
 from barscan.analyzer.pos import get_pos_tags
-from barscan.analyzer.processor import clean_lyrics_preserve_lines
+from barscan.analyzer.processor import clean_lyrics_preserve_lines, tokenize
 from barscan.analyzer.sentiment import (
     analyze_sentiment,
     get_sentiment_scores,
@@ -569,8 +569,13 @@ def to_wordgrain_bar(
             semantics: BarSemantics | None = None
 
             if config is not None:
-                # Word count
-                word_count = len(stripped.split())
+                # Word count (use tokenizer without POS filtering for full count)
+                wc_config = (
+                    config.model_copy(update={"use_pos_filtering": False})
+                    if config.use_pos_filtering
+                    else config
+                )
+                word_count = len(tokenize(stripped, wc_config))
                 # Syllable count
                 syllable_count = count_line_syllables(stripped, language)
                 metrics = BarMetrics(word_count=word_count, syllable_count=syllable_count)
